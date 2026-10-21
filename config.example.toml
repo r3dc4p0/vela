@@ -1,0 +1,99 @@
+# Vela configuration — every key, with its default.
+#
+# Location:
+#   Linux/BSD   $XDG_CONFIG_HOME/vela/config.toml   (~/.config/vela/config.toml)
+#   macOS       ~/Library/Application Support/vela/config.toml
+#   Windows     %APPDATA%\vela\config.toml
+#
+# Copy this file there and uncomment what you want to change. Every key is
+# optional; an invalid value is clamped or ignored and reported in the
+# notification area at startup, never a reason to fail to start.
+#
+# Check the effective result with:  vela --print-config
+
+[editor]
+# Columns per tab stop. Values below 1 or above 16 are clamped.
+tab_width = 4
+# Insert spaces instead of a literal tab when you press Tab.
+use_spaces = true
+# Copy the current line's indentation onto the next line on Enter.
+auto_indent = true
+# Colour source code. Turning this off makes no difference to the text.
+syntax_highlighting = true
+# Rows of context kept above and below the cursor when scrolling.
+scroll_off = 3
+# Show distances from the cursor instead of absolute line numbers.
+relative_numbers = false
+# Show the line-number gutter at all.
+line_numbers = true
+# Render tabs as →, spaces as · and control characters as ^X.
+show_whitespace = false
+# Draw faint vertical guides at the indentation stops.
+show_indent_guides = true
+# Tint the row the cursor is on.
+highlight_cursor_line = true
+# Highlight the bracket pair around the cursor.
+match_brackets = true
+# Undo limits. Older entries are dropped first.
+max_undo_entries = 5000
+max_undo_mb = 64
+# Ask before closing a buffer or quitting with unsaved changes.
+confirm_unsaved = true
+# Reopen the files from the previous session at startup.
+restore_session = false
+
+[ui]
+# "vela-dark" or "vela-light". Individual colours can be overridden in [colors].
+theme = "vela-dark"
+# Show the contextual shortcut hints on the last row.
+show_hints = true
+# Show the buffer tab strip when more than one buffer is open.
+show_tabs = true
+# Mouse wheel scrolling, click to place the cursor, double-click to select a word.
+mouse = true
+# How long notifications stay on screen.
+message_timeout_ms = 4000
+# Show the application bar at the top.
+show_topbar = true
+
+[files]
+# Strip trailing whitespace from every line when saving.
+trim_trailing_whitespace = false
+# Add a final newline when saving if the buffer lacks one.
+ensure_final_newline = false
+# Warn before overwriting a file that changed on disk since it was opened.
+warn_external_change = true
+# How many entries to remember for Ctrl+P / the open prompt.
+recent_files = 20
+
+[terminal]
+# Kitty keyboard protocol: "auto" (enable when the terminal is known to support
+# it), "on" (force) or "off" (never). "on" on an unsupporting terminal makes
+# the terminal print escape codes, so prefer "auto".
+keyboard_enhancement = "auto"
+
+# Key bindings. Format: "modifier+key" = "command.id".
+# Modifiers: ctrl, alt, shift, super. Keys: a character, a named key (enter, esc,
+# tab, space, backspace, delete, insert, home, end, pageup, pagedown, up, down,
+# left, right) or f1–f12. An empty value removes a binding.
+# Run `vela --list-keys` for the ids.
+[keys]
+# "ctrl+shift+p" = "help.commandPalette"
+# "f5" = "file.reload"
+# "ctrl+k" = "edit.deleteLine"
+# "ctrl+q" = ""
+
+# Colour overrides. Accepts "#rrggbb" and the 16 ANSI names (black, red, green,
+# yellow, blue, magenta, cyan, gray, darkgray, lightred, ... ).
+[colors]
+# bg = "#14171e"
+# fg = "#d8dee9"
+# accent = "#c8a05a"          # sets the top-bar and status-bar accent
+# selection_bg = "#2f3b52"
+# cursor_line_bg = "#1b1f28"
+# match_bg = "#3d4a2a"
+# current_match_bg = "#5a6b3a"
+# error = "#e06c75"
+# warn = "#e5c07b"
+# info = "#61afef"
+# success = "#98c379"
