@@ -127,6 +127,13 @@ widening: a selection of `he` also matches the `he` inside `hello`. The search
 text is whatever the user actually selected, and quietly widening a fragment to
 whole words would make it impossible to rename part of a longer identifier.
 
+Caret *direction* is invisible — a selection looks identical whether it was made
+left-to-right or right-to-left — but it decides which end an arrow key moves
+from. A caret added by `Ctrl+D` therefore copies the primary's direction, and
+`move_cursor` aligns any caret that disagrees before applying the motion. Without
+both, a selection made backwards puts the two cursors on opposite ends of their
+words and the first keystroke splits the group apart.
+
 ### Atomic saving
 
 `filesystem::save` writes to a temporary file in the same directory, `fsync`s it,

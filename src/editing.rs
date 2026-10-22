@@ -683,7 +683,15 @@ pub fn add_cursor_to_next_occurrence(doc: &mut Document) -> Occurrence {
         return Occurrence::Exhausted;
     };
 
-    let caret = Caret::selecting(start + len, start);
+    // Mirror the primary selection's direction so both carets keep their
+    // cursor on the same edge. Adding an always-forward caret next to a
+    // selection made backwards leaves the two cursors on opposite ends of
+    // their words, and the first arrow key then splits them apart.
+    let caret = if doc.primary_caret().is_backward() {
+        Caret::selecting(start, start + len)
+    } else {
+        Caret::selecting(start + len, start)
+    };
     if doc.add_caret(caret) {
         Occurrence::Added(doc.caret_count())
     } else {
@@ -1022,6 +1030,27 @@ mod tests {
         assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(3));
         assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Exhausted);
         assert_eq!(d.caret_count(), 3);
+    }
+
+    #[test]
+    fn next_occurrence_keeps_the_selection_direction() {
+        let mut d = doc("abc xabcdd");
+        d.set_cursor(3);
+        d.set_cursor_extending(0);
+        assert!(d.primary_caret().is_backward(), "selected right to left");
+
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(2));
+        let added = d
+            .carets()
+            .into_iter()
+            .find(|c| c.pos != d.cursor())
+            .expect("a second caret");
+        assert_eq!(added.selection(), Some(5..8));
+        assert!(
+            added.is_backward(),
+            "the added caret mirrors the primary's direction, so both cursors \
+             sit on the same edge of their word"
+        );
     }
 
     #[test]

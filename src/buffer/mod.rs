@@ -98,6 +98,38 @@ impl Caret {
     pub fn span(&self) -> Range<usize> {
         self.selection().unwrap_or(self.pos..self.pos)
     }
+
+    /// True when the selection was made backwards, i.e. the cursor sits on the
+    /// left edge and the anchor on the right.
+    ///
+    /// Direction is invisible in the painted output — a selection looks the
+    /// same either way — but it decides which end an arrow key moves from, so
+    /// carets that disagree about it drift apart the moment the user moves.
+    pub fn is_backward(&self) -> bool {
+        matches!(self.anchor, Some(anchor) if anchor > self.pos)
+    }
+
+    /// The same selection with the cursor and anchor swapped, so the cursor
+    /// lands on the opposite edge. A collapsed caret is already directionless
+    /// and is returned unchanged.
+    pub fn flipped(&self) -> Self {
+        match self.anchor {
+            Some(anchor) => Self {
+                pos: anchor,
+                anchor: Some(self.pos),
+            },
+            None => *self,
+        }
+    }
+
+    /// This caret with its direction forced to match `backward`.
+    pub fn aligned_with(&self, backward: bool) -> Self {
+        if self.is_backward() == backward {
+            *self
+        } else {
+            self.flipped()
+        }
+    }
 }
 
 /// One replacement belonging to a specific caret.
@@ -393,6 +425,11 @@ impl Document {
 
     /// Apply a motion, optionally extending the selection.
     pub fn move_cursor(&mut self, motion: Motion, extend: bool, ctx: MotionCtx) {
+        // Direction of the primary selection before the motion. Secondary
+        // carets are aligned to it so that every caret advances from the same
+        // edge of its own selection; a caret whose cursor sits on the opposite
+        // edge would otherwise move the wrong way and the group would drift.
+        let backward = self.primary_caret().is_backward();
         let (next, col) = motion::apply(
             self.storage.as_ref(),
             self.cursor,
@@ -419,11 +456,12 @@ impl Document {
         if !self.extra.is_empty() {
             let mut moved = Vec::with_capacity(self.extra.len());
             for caret in &self.extra {
-                let (pos, _) = motion::apply(self.storage.as_ref(), caret.pos, motion, ctx, None);
+                let aligned = caret.aligned_with(backward);
+                let (pos, _) = motion::apply(self.storage.as_ref(), aligned.pos, motion, ctx, None);
                 moved.push(if extend {
                     Caret {
                         pos,
-                        anchor: Some(caret.anchor.unwrap_or(caret.pos)),
+                        anchor: Some(aligned.anchor.unwrap_or(aligned.pos)),
                     }
                 } else {
                     Caret::at(pos)
@@ -1069,6 +1107,25 @@ mod tests {
 
     fn doc(text: &str) -> Document {
         Document::from_text(text, None)
+    }
+
+    #[test]
+    fn movement_aligns_carets_that_disagree_about_direction() {
+        let mut d = doc("abc xabcdd");
+        d.set_cursor(3);
+        d.set_cursor_extending(0); // backwards: cursor on 'a', anchor after 'c'
+        assert!(d.primary_caret().is_backward());
+        d.add_caret(Caret::selecting(8, 5)); // forwards: cursor on 'd'
+        assert!(!d.extra_carets()[0].is_backward());
+
+        d.move_cursor(Motion::Right, false, MotionCtx::default());
+
+        assert_eq!(d.cursor(), 1, "the primary moves off 'a'");
+        assert_eq!(
+            d.extra_carets()[0].pos,
+            6,
+            "the secondary advances from the same edge instead of running past 'd'"
+        );
     }
 
     #[test]

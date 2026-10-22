@@ -191,6 +191,37 @@ fn next_occurrence_matches_a_partial_word() {
 }
 
 #[test]
+fn backwards_selection_keeps_the_carets_aligned() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "abc\nxabcdd");
+    ctrl(&mut app, KeyCode::Home);
+    for _ in 0..3 {
+        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+    }
+    for _ in 0..3 {
+        shift(&mut app, KeyCode::Left);
+    }
+    assert_eq!(
+        app.active_doc().unwrap().selection(),
+        Some(0..3),
+        "`abc` selected right to left, cursor on the `a`"
+    );
+
+    // Both cursors must land on the left edge: the `a` of each word.
+    ctrl(&mut app, 'd');
+    assert_eq!(caret_positions(&app), vec![0, 5]);
+
+    // One movement keeps them in step rather than splitting them apart.
+    press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+    assert_eq!(caret_positions(&app), vec![1, 6]);
+
+    type_str(&mut app, "Z");
+    assert_eq!(text(&app), "aZbc\nxaZbcdd");
+}
+
+#[test]
 fn undo_restores_the_text_and_the_cursors() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());
