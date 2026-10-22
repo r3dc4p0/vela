@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Rect;
 use tracing::{debug, error as log_error, info};
 
@@ -83,10 +83,16 @@ pub struct App {
     /// Set while waiting for the user to confirm quitting.
     quit_pending: bool,
     brackets_cache: BracketCache,
-    /// Last mouse press, for double-click word selection.
+    /// Last mouse press, for double- and triple-click selection.
     last_click: Option<(Instant, u16, u16)>,
+    /// Clicks in the current run: 1 place, 2 word, 3 line.
+    click_count: u8,
+    /// Where a drag started, so the selection grows from the press point.
+    drag_anchor: Option<usize>,
     /// Editor area from the last frame, for mouse coordinate mapping.
     last_editor_area: Rect,
+    /// Tab strip from the last frame, so tabs can be clicked.
+    last_tabs_area: Rect,
     /// Frames rendered so far (diagnostics).
     pub frame: u64,
     /// When false, recents and session state are neither read nor written.
@@ -184,7 +190,10 @@ impl App {
             quit_pending: false,
             brackets_cache: None,
             last_click: None,
+            click_count: 0,
+            drag_anchor: None,
             last_editor_area: Rect::default(),
+            last_tabs_area: Rect::default(),
             frame: 0,
             persist: true,
         };
@@ -403,30 +412,30 @@ impl App {
     }
 
     fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+        use crossterm::event::{MouseButton, MouseEventKind};
         if !self.config.ui.mouse || self.ui.overlay.captures_input() {
             return;
         }
         match mouse.kind {
             MouseEventKind::ScrollUp => self.scroll_by(-3),
             MouseEventKind::ScrollDown => self.scroll_by(3),
-            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+            MouseEventKind::ScrollLeft => self.scroll_sideways(-4),
+            MouseEventKind::ScrollRight => self.scroll_sideways(4),
+            MouseEventKind::Down(MouseButton::Left) => {
+                // The tab strip is chrome, so it is tested before the text.
+                if self.tab_at(mouse.column, mouse.row).is_some() {
+                    self.click_tab(mouse.column, mouse.row);
+                    return;
+                }
                 // Alt+Click extends the caret set instead of moving the cursor.
                 if mouse.modifiers.contains(KeyModifiers::ALT) {
                     self.alt_click_at(mouse.column, mouse.row);
                     return;
                 }
-                let now = Instant::now();
-                let is_double = self
-                    .last_click
-                    .map(|(t, x, y)| {
-                        now.duration_since(t) < Duration::from_millis(400)
-                            && x.abs_diff(mouse.column) <= 1
-                            && y == mouse.row
-                    })
-                    .unwrap_or(false);
-                self.last_click = Some((now, mouse.column, mouse.row));
-                self.click_at(mouse.column, mouse.row, is_double);
+                self.click_at(mouse.column, mouse.row);
             }
+            MouseEventKind::Drag(MouseButton::Left) => self.drag_to(mouse.column, mouse.row),
+            MouseEventKind::Up(MouseButton::Left) => self.drag_anchor = None,
             _ => {}
         }
     }
@@ -464,18 +473,124 @@ impl App {
         Some(line_start + offset)
     }
 
-    /// Map a screen position to a buffer position and move the cursor there.
-    fn click_at(&mut self, column: u16, row: u16, select_word: bool) {
+    /// Like [`buffer_position_at`](Self::buffer_position_at) but forgiving: a
+    /// pointer outside the text — in the gutter, past the end of a line, or
+    /// beyond the edges during a drag — maps to the nearest position instead of
+    /// nothing.
+    fn drag_position_at(&self, column: u16, row: u16) -> Option<usize> {
+        let area = self.last_editor_area;
+        if area.width == 0 || area.height == 0 {
+            return None;
+        }
+        let doc = &self.buffers[self.active_index()?];
+        let cfg = &self.config;
+        let row = row.clamp(area.y, area.y + area.height - 1);
+        let line =
+            (doc.scroll_top() + (row - area.y) as usize).min(doc.line_count().saturating_sub(1));
+        let digits = crate::ui::editor::decimal_digits(doc.line_count()).max(3);
+        let gutter = if cfg.editor.line_numbers {
+            (digits + 1) as u16
+        } else {
+            0
+        };
+        let target_col = if column < area.x + gutter {
+            0
+        } else {
+            (column - area.x - gutter) as usize + doc.scroll_left()
+        };
+        let line_start = doc.storage().line_start(line);
+        let text = doc.line_text(line);
+        let (offset, _) =
+            crate::buffer::motion::char_at_visual_col(&text, target_col, cfg.tab_width());
+        Some(line_start + offset)
+    }
+
+    /// Handle a left press on the text: place the cursor, or select a word on
+    /// the second click and a line on the third.
+    fn click_at(&mut self, column: u16, row: u16) {
+        let now = Instant::now();
+        let repeated = self
+            .last_click
+            .map(|(t, x, y)| {
+                now.duration_since(t) < Duration::from_millis(400)
+                    && x.abs_diff(column) <= 1
+                    && y == row
+            })
+            .unwrap_or(false);
+        // Cycle 1 -> 2 -> 3 -> 1 so a fourth click starts over.
+        self.click_count = if repeated {
+            self.click_count % 3 + 1
+        } else {
+            1
+        };
+        self.last_click = Some((now, column, row));
+
         let Some(pos) = self.buffer_position_at(column, row) else {
+            self.drag_anchor = None;
             return;
         };
         let Some(idx) = self.active_index() else {
             return;
         };
         let doc = &mut self.buffers[idx];
-        doc.set_cursor(pos);
-        if select_word {
-            editing::select_word_at_cursor(doc);
+        match self.click_count {
+            2 => {
+                doc.set_cursor(pos);
+                editing::select_word_at_cursor(doc);
+            }
+            3 => {
+                doc.set_cursor(pos);
+                editing::select_line_at_cursor(doc);
+            }
+            _ => doc.set_cursor(pos),
+        }
+        // A drag that follows this press selects from where it landed.
+        self.drag_anchor = Some(pos);
+    }
+
+    /// Extend the selection to the pointer, scrolling when it leaves the text.
+    fn drag_to(&mut self, column: u16, row: u16) {
+        let area = self.last_editor_area;
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+        let Some(anchor) = self.drag_anchor else {
+            return;
+        };
+        // Autoscroll one line per event while the pointer is above or below the
+        // text, so a drag past the edge keeps extending instead of stopping.
+        if row < area.y {
+            self.scroll_by(-1);
+        } else if row >= area.y + area.height {
+            self.scroll_by(1);
+        }
+        let Some(pos) = self.drag_position_at(column, row) else {
+            return;
+        };
+        let Some(idx) = self.active_index() else {
+            return;
+        };
+        self.buffers[idx].set_selection(pos, anchor);
+    }
+
+    /// The buffer whose tab covers `(column, row)`, if any.
+    fn tab_at(&self, column: u16, row: u16) -> Option<usize> {
+        let area = self.last_tabs_area;
+        if area.width == 0 || area.height == 0 {
+            return None;
+        }
+        if row < area.y || row >= area.y + area.height {
+            return None;
+        }
+        crate::ui::chrome::tab_spans(self, area)
+            .into_iter()
+            .find(|span| column >= span.x && column < span.x + span.width)
+            .map(|span| span.buffer)
+    }
+
+    fn click_tab(&mut self, column: u16, row: u16) {
+        if let Some(idx) = self.tab_at(column, row) {
+            self.focus_buffer(idx);
         }
     }
 
@@ -512,6 +627,16 @@ impl App {
         let top = doc.scroll_top() as isize + delta;
         let max = doc.line_count().saturating_sub(1) as isize;
         doc.set_scroll_top(top.clamp(0, max) as usize);
+    }
+
+    /// Horizontal wheel scrolling, for lines wider than the window.
+    fn scroll_sideways(&mut self, delta: isize) {
+        let Some(idx) = self.active_index() else {
+            return;
+        };
+        let doc = &mut self.buffers[idx];
+        let left = doc.scroll_left() as isize + delta;
+        doc.set_scroll_left(left.max(0) as usize);
     }
 
     // ------------------------------------------------------------ edit paths
@@ -971,6 +1096,21 @@ impl App {
     /// Editor area from the last frame, used to map mouse coordinates.
     pub fn set_editor_area(&mut self, area: Rect) {
         self.last_editor_area = area;
+    }
+
+    /// Tab strip from the last frame, used to map mouse coordinates.
+    pub fn set_tabs_area(&mut self, area: Rect) {
+        self.last_tabs_area = area;
+    }
+
+    /// Editor area as of the last frame.
+    pub fn editor_area(&self) -> Rect {
+        self.last_editor_area
+    }
+
+    /// Tab strip as of the last frame.
+    pub fn tabs_area(&self) -> Rect {
+        self.last_tabs_area
     }
 
     // ------------------------------------------------------------- brackets

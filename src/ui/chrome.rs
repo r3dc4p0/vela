@@ -96,6 +96,43 @@ pub fn draw_topbar(buf: &mut Buffer, area: Rect, app: &App) {
     left.clear();
 }
 
+/// One tab's hit box: where it starts, how wide it is, and which buffer it
+/// selects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TabSpan {
+    pub x: u16,
+    pub width: u16,
+    pub buffer: usize,
+}
+
+/// The label a tab shows, including its one-cell padding on each side.
+fn tab_label(doc: &crate::buffer::Document) -> String {
+    format!(
+        " {}{} ",
+        doc.display_name(),
+        if doc.is_modified() { " ●" } else { "" }
+    )
+}
+
+/// Which columns each visible tab occupies.
+///
+/// Shared by the painter and by mouse hit-testing, so clicking a tab can never
+/// disagree with where the tab was drawn.
+pub fn tab_spans(app: &App, area: Rect) -> Vec<TabSpan> {
+    let right = area.x + area.width;
+    let mut x = area.x;
+    let mut spans = Vec::new();
+    for (buffer, doc) in app.buffers.iter().enumerate() {
+        let width = tab_label(doc).chars().count() as u16;
+        if x + width > right {
+            break;
+        }
+        spans.push(TabSpan { x, width, buffer });
+        x += width;
+    }
+    spans
+}
+
 /// Buffer tab strip.
 pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
     if area.height == 0 {
@@ -110,21 +147,10 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
             .fg(theme.tab_inactive_fg),
     );
 
+    let spans = tab_spans(app, area);
     let mut x = area.x;
-    let right = area.x + area.width;
-    let mut shown = 0usize;
-    for (i, doc) in app.buffers.iter().enumerate() {
-        let label = format!(
-            " {}{} ",
-            doc.display_name(),
-            if doc.is_modified() { " ●" } else { "" }
-        );
-        let w = label.chars().count() as u16;
-        if x + w > right {
-            break;
-        }
-        let active = i == app.active;
-        let style = if active {
+    for span in &spans {
+        let style = if span.buffer == app.active {
             Style::default()
                 .bg(theme.tab_active_bg)
                 .fg(theme.tab_active_fg)
@@ -134,15 +160,17 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
                 .bg(theme.tab_inactive_bg)
                 .fg(theme.tab_inactive_fg)
         };
-        buf.set_string(x, area.y, &label, style);
-        x += w;
-        shown += 1;
+        let label = tab_label(&app.buffers[span.buffer]);
+        buf.set_string(span.x, area.y, &label, style);
+        x = span.x + span.width;
     }
-    if shown < app.buffers.len() && x + 4 <= right {
+
+    let hidden = app.buffers.len() - spans.len();
+    if hidden > 0 && x + 4 <= area.x + area.width {
         buf.set_string(
             x,
             area.y,
-            format!(" +{} ", app.buffers.len() - shown),
+            format!(" +{hidden} "),
             Style::default().fg(theme.dim),
         );
     }

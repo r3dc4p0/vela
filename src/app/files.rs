@@ -214,6 +214,16 @@ impl App {
         self.brackets_cache_reset();
     }
 
+    /// Switch to the buffer at `idx`, used by clicking its tab.
+    pub fn focus_buffer(&mut self, idx: usize) {
+        if idx >= self.buffers.len() || idx == self.active {
+            return;
+        }
+        self.active = idx;
+        self.search.clear();
+        self.brackets_cache_reset();
+    }
+
     pub fn cycle_buffer(&mut self, delta: isize) {
         if self.buffers.len() < 2 {
             return;

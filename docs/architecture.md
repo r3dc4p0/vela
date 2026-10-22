@@ -165,6 +165,24 @@ combining marks zero. Long lines are rendered through a window that starts at th
 first visible character, so opening a 100 MB single-line file does not freeze the
 UI. Lines longer than 8 KiB are clipped rather than scanned to the end.
 
+### Mouse hit-testing reads the last frame
+
+Mouse events arrive as screen coordinates, but the mapping from a cell to a
+character index depends on the layout of the frame that is currently on screen —
+where the editor starts, how wide the gutter is, how far the view is scrolled.
+So `ui::draw` publishes the editor and tab rects back into `App`, and
+`handle_mouse` maps against those. The tab strip is laid out by a single
+`chrome::tab_spans` function that both the painter and the hit-test consume, so
+a tab can never be clickable somewhere it was not drawn.
+
+Two position mappings exist on purpose: `buffer_position_at` is strict and
+returns nothing for a click in the gutter, while `drag_position_at` clamps, so a
+drag that runs off the edge of the text keeps extending to the nearest line
+instead of freezing. A drag anchors where the press landed and moves the cursor
+with the pointer, which keeps the selection direction — an upwards drag leaves
+the cursor on the upper edge, so the next arrow key moves the way the pointer
+did.
+
 ### One command system
 
 `Command` is an enum with a stable id, a title, a category and default keys. Key
@@ -202,6 +220,7 @@ would dominate the startup budget.
 | Storage, motions, undo, search, filesystem | Unit tests in each module, including EOL/encoding/BOM/permission edge cases |
 | Editing commands | `tests/editing_core.rs` drives the real `App` through real key events |
 | Multi-cursor | `tests/multi_cursor.rs`: caret sets, next occurrence, Alt+Click, undo, status bar, painted blocks |
+| Mouse | `tests/mouse.rs`: click, drag and direction, edge autoscroll, multi-click, wheel, tab clicks — coordinates derived from the published layout |
 | Workflows | `tests/workflow.rs`: buffers, search, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds, search range validity, save/load round trips |

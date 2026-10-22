@@ -367,8 +367,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     let l = layout(area, app);
     // Mouse hit-testing and the page size both need the rect the editor was
-    // actually given; only the draw pass knows it.
+    // actually given; only the draw pass knows it. Same for the tab strip,
+    // which is clickable.
     app.set_editor_area(l.editor);
+    app.set_tabs_area(l.tabs.unwrap_or_default());
 
     if let Some(r) = l.topbar {
         chrome::draw_topbar(frame.buffer_mut(), r, app);

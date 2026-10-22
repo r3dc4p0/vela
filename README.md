@@ -9,7 +9,7 @@ loses your work.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.1.0 │
+│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.2.0 │
 ├──────────────────────────────────────────────────────────────────────┤
 │  1  use std::ops::Range;                                             │
 │  2                                                                   │
@@ -36,6 +36,11 @@ occurrence of the selection with `Ctrl+D`, or place them with `Alt+Click`.
 Typing, deleting, indenting and newlines apply to every caret as a single undo
 step, and `Esc` collapses back to one. Occurrences are matched literally, so a
 selection of `he` also finds the `he` inside `hello`.
+
+**Mouse** — click to place the cursor, drag to select (autoscrolling above and
+below the text), double-click for a word and triple-click for a line, wheel to
+scroll vertically and horizontally, and click a tab to switch buffers.
+`Alt+Click` adds a cursor. Disable the lot with `mouse = false`.
 
 **Files** — multiple buffers with tabs; atomic saves (temp file + `fsync` +
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM

@@ -12,6 +12,8 @@ Ordered by what a user notices first, not by what is easiest.
   dark/light themes, visible whitespace, indent guides, bracket matching
 - Auto-indent, comment toggling, duplicate/delete/move lines, trim whitespace
 - Multi-cursor: stacked carets, select-next-occurrence, Alt+Click, one undo step
+- Mouse: click, drag-selection with edge autoscroll, double/triple-click, wheel
+  scrolling, tab switching
 - Recent files, session restore, configuration with validation, logging
 - Terminal restoration on panic and on `SIGTERM`/`SIGINT`/`SIGHUP`/`SIGQUIT`
 - Encoding detection (UTF-8, UTF-16 with BOM), LF/CRLF/CR round-tripping
@@ -34,12 +36,7 @@ One window, two editor panes sharing the buffer list. The renderer already takes
 an `Area`, so the work is layout plus a focus model; the risk is key routing, so
 it needs its own tests.
 
-### 3. Selection by mouse drag
-
-Click and double-click work; dragging does not. `App::handle_mouse` needs
-`Drag` handling plus autoscroll near the edges.
-
-### 4. Incremental regex search on large files
+### 3. Incremental regex search on large files
 
 Regex currently rescans the whole buffer on each change. Chunked scanning with a
 resumable matcher would keep the same responsiveness as literal search.

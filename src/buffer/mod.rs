@@ -524,6 +524,20 @@ impl Document {
         self.preferred_col = None;
     }
 
+    /// Move the cursor to `pos` with `anchor` as the other end of the
+    /// selection, keeping the direction implied by the two positions.
+    ///
+    /// Unlike [`set_primary_selection`](Self::set_primary_selection) this does
+    /// not normalise the range, so a drag upwards leaves the cursor on the
+    /// upper edge — which is where the next arrow key moves from.
+    pub fn set_selection(&mut self, pos: usize, anchor: usize) {
+        let len = self.len_chars();
+        self.cursor = pos.min(len);
+        self.anchor = Some(anchor.min(len));
+        self.preferred_col = None;
+        self.extra.clear();
+    }
+
     pub fn clear_selection(&mut self) {
         self.anchor = None;
     }

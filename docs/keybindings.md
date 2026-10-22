@@ -40,6 +40,22 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Tab` / `Shift+Tab` | — | Indent / dedent (inserts at the cursor without a selection) |
 | `Ctrl+Shift+W` | `view.wordCount` | Word, character and line count |
 
+## Mouse
+
+Mouse support is on by default; turn it off with `mouse = false` in the `[ui]`
+section.
+
+| Gesture | Action |
+| --- | --- |
+| Click | Place the cursor |
+| Drag | Select from the press point; the view autoscrolls when the pointer moves above or below the text, and an upwards drag leaves the cursor on the upper edge |
+| Double-click | Select the word |
+| Triple-click | Select the line |
+| `Alt+Click` | Add a cursor, or remove the one already there |
+| Wheel up / down | Scroll three lines |
+| Wheel left / right | Scroll four columns (terminals that report it) |
+| Click a tab | Switch to that buffer |
+
 ## Navigation
 
 | Key | Command id | Action |

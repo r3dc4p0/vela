@@ -727,6 +727,21 @@ pub fn select_word_at_cursor(doc: &mut Document) {
     doc.set_primary_selection(start + lo..start + hi);
 }
 
+/// Select the whole line under the primary caret, excluding its newline.
+///
+/// Triple-clicking a line is the usual way to reach this; an empty line leaves
+/// a collapsed caret rather than a zero-width selection.
+pub fn select_line_at_cursor(doc: &mut Document) {
+    let line = doc.storage().line_of_char(doc.cursor());
+    let start = doc.storage().line_start(line);
+    let end = line_end(doc, line);
+    if start == end {
+        doc.set_cursor(start);
+        return;
+    }
+    doc.set_primary_selection(start..end);
+}
+
 /// Clipboard payload for the current caret set.
 ///
 /// With one caret this keeps the familiar behaviour: the selection, or the
