@@ -304,11 +304,8 @@ fn layout(area: Rect, app: &App) -> Layout {
         budget -= 1;
     }
     if want_tabs && budget >= 2 {
-        // Two rows where there is room: the accent line above, the labels
-        // below. On a very short terminal fall back to labels only, so the
-        // strip cannot eat the last editing row.
-        tabs = if budget >= 3 { 2 } else { 1 };
-        budget -= tabs;
+        tabs = 1;
+        budget -= 1;
     }
     if want_hints && budget >= 2 {
         hints = 1;
@@ -327,8 +324,8 @@ fn layout(area: Rect, app: &App) -> Layout {
         None
     };
     let tabs_rect = if tabs > 0 {
-        let r = Rect::new(area.x, y, area.width, tabs as u16);
-        y += tabs as u16;
+        let r = Rect::new(area.x, y, area.width, 1);
+        y += 1;
         Some(r)
     } else {
         None

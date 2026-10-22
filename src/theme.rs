@@ -67,8 +67,6 @@ pub struct Theme {
     pub tab_active_fg: Color,
     pub tab_inactive_bg: Color,
     pub tab_inactive_fg: Color,
-    /// Line along the top edge of the active tab.
-    pub tab_accent: Color,
 
     pub statusbar_bg: Color,
     pub statusbar_fg: Color,
@@ -164,9 +162,8 @@ impl Theme {
 
             tab_active_bg: Color::Rgb(0x14, 0x17, 0x1e),
             tab_active_fg: Color::Rgb(0xe8, 0xec, 0xf4),
-            tab_inactive_bg: Color::Rgb(0x0f, 0x12, 0x18),
+            tab_inactive_bg: Color::Rgb(0x1c, 0x21, 0x2b),
             tab_inactive_fg: Color::Rgb(0x6b, 0x74, 0x86),
-            tab_accent: Color::Rgb(0xc8, 0xa0, 0x5a),
 
             statusbar_bg: Color::Rgb(0x1c, 0x21, 0x2b),
             statusbar_fg: Color::Rgb(0x9a, 0xa3, 0xb5),
@@ -237,7 +234,6 @@ impl Theme {
             tab_active_fg: Color::Rgb(0x1a, 0x1d, 0x22),
             tab_inactive_bg: Color::Rgb(0xef, 0xef, 0xea),
             tab_inactive_fg: Color::Rgb(0x8a, 0x90, 0x9a),
-            tab_accent: Color::Rgb(0x9a, 0x6b, 0x1e),
 
             statusbar_bg: Color::Rgb(0xef, 0xef, 0xea),
             statusbar_fg: Color::Rgb(0x4a, 0x50, 0x5a),
@@ -334,7 +330,6 @@ impl Theme {
             "tab_active_fg" => self.tab_active_fg = c,
             "tab_inactive_bg" => self.tab_inactive_bg = c,
             "tab_inactive_fg" => self.tab_inactive_fg = c,
-            "tab_accent" => self.tab_accent = c,
             "statusbar_bg" => self.statusbar_bg = c,
             "statusbar_fg" => self.statusbar_fg = c,
             "statusbar_accent" => self.statusbar_accent = c,
@@ -357,7 +352,6 @@ impl Theme {
             "accent" => {
                 self.topbar_accent = c;
                 self.statusbar_accent = c;
-                self.tab_accent = c;
             }
             "warn" | "warning" => self.warn = c,
             "info" => self.info = c,
