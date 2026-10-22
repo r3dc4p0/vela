@@ -29,7 +29,7 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Ctrl+X` / `Ctrl+C` / `Ctrl+V` | `edit.cut` / `edit.copy` / `edit.paste` | Clipboard (line-wise when nothing is selected) |
 | `Ctrl+Shift+C` | `edit.copy` | Copy, for terminals that turn `Ctrl+C` into `SIGINT` |
 | `Ctrl+A` | `edit.selectAll` | Select the whole document |
-| `Ctrl+D` | `edit.addCursorToNext` | Add a cursor at the next occurrence of the selection (the first press selects the word under the cursor) |
+| `Ctrl+D` | `edit.addCursorToNext` | Add a cursor at the next occurrence of the selection (the first press selects the word under the cursor); matching is literal, so `he` also matches inside `hello` |
 | `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | `edit.addCursorAbove` / `edit.addCursorBelow` | Add a cursor on the line above / below, keeping the column |
 | `Alt+Click` | — | Add a cursor, or remove the one already there |
 | `Esc` | — | Collapse every cursor back to one |

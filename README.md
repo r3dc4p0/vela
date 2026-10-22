@@ -34,7 +34,8 @@ matching; trailing-whitespace trimming; optional final newline.
 **Multi-cursor** — stack carets with `Ctrl+Alt+Up`/`Ctrl+Alt+Down`, add one per
 occurrence of the selection with `Ctrl+D`, or place them with `Alt+Click`.
 Typing, deleting, indenting and newlines apply to every caret as a single undo
-step, and `Esc` collapses back to one.
+step, and `Esc` collapses back to one. Occurrences are matched literally, so a
+selection of `he` also finds the `he` inside `hello`.
 
 **Files** — multiple buffers with tabs; atomic saves (temp file + `fsync` +
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM

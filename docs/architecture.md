@@ -122,6 +122,11 @@ Commands that shift offsets in a way they cannot map back — line duplicate,
 line delete, batch indent, `apply_batch` in general — clear the secondary carets
 instead of leaving stale positions behind.
 
+`Ctrl+D` searches for the selected text verbatim, with no word-boundary
+widening: a selection of `he` also matches the `he` inside `hello`. The search
+text is whatever the user actually selected, and quietly widening a fragment to
+whole words would make it impossible to rename part of a longer identifier.
+
 ### Atomic saving
 
 `filesystem::save` writes to a temporary file in the same directory, `fsync`s it,

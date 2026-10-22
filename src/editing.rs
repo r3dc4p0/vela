@@ -644,6 +644,12 @@ fn position_on_line(doc: &Document, line: usize, col: usize, tab_width: usize) -
 /// The first press selects the word under the cursor and adds the next
 /// occurrence, matching how "select next occurrence" behaves in mainstream
 /// editors: one key, one more caret, repeatable.
+///
+/// Matching is literal and does not respect word boundaries: a selection of
+/// `he` also matches the `he` inside `hello`. That is deliberate. The search
+/// text is whatever the user actually selected, and silently widening a
+/// partial selection to whole words makes it impossible to rename a fragment
+/// that appears inside larger identifiers.
 pub fn add_cursor_to_next_occurrence(doc: &mut Document) -> Occurrence {
     if doc.caret_count() >= MAX_CARETS {
         return Occurrence::Limit;
@@ -669,13 +675,10 @@ pub fn add_cursor_to_next_occurrence(doc: &mut Document) -> Occurrence {
     let starts = doc
         .storage()
         .find_literal(&needle, true, OCCURRENCE_SCAN_LIMIT);
-    let whole_word = needle.chars().all(|c| c.is_alphanumeric() || c == '_');
 
-    let found = starts.into_iter().find(|&start| {
-        start >= from
-            && (!whole_word || is_whole_word(doc, start, len))
-            && doc.caret_at(start).is_none()
-    });
+    let found = starts
+        .into_iter()
+        .find(|&start| start >= from && doc.caret_at(start).is_none());
     let Some(start) = found else {
         return Occurrence::Exhausted;
     };
@@ -714,20 +717,6 @@ pub fn select_word_at_cursor(doc: &mut Document) {
     }
     // Not `select_range`: that would drop the cursors already stacked.
     doc.set_primary_selection(start + lo..start + hi);
-}
-
-/// True when `start..start+len` is bounded by non-word characters.
-fn is_whole_word(doc: &Document, start: usize, len: usize) -> bool {
-    let is_word = |c: char| c.is_alphanumeric() || c == '_';
-    let before_ok = match start.checked_sub(1).and_then(|i| doc.storage().char_at(i)) {
-        Some(c) => !is_word(c),
-        None => true,
-    };
-    let after_ok = match doc.storage().char_at(start + len) {
-        Some(c) => !is_word(c),
-        None => true,
-    };
-    before_ok && after_ok
 }
 
 /// Clipboard payload for the current caret set.
@@ -1036,15 +1025,34 @@ mod tests {
     }
 
     #[test]
-    fn next_occurrence_respects_word_boundaries() {
+    fn next_occurrence_is_literal_not_whole_word() {
         let mut d = doc("cat category cat");
         d.set_cursor(0);
         assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(2));
         assert_eq!(
             d.carets()[1].selection(),
-            Some(13..16),
-            "the 'cat' inside 'category' is skipped"
+            Some(4..7),
+            "`cat` inside `category` matches: the search is literal"
         );
+    }
+
+    #[test]
+    fn next_occurrence_matches_inside_longer_words() {
+        // A partial-word selection is searched for verbatim.
+        let mut d = doc("hello help");
+        d.select_range(0..2);
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(2));
+        assert_eq!(
+            d.carets()[1].selection(),
+            Some(6..8),
+            "the `he` inside `help` is the next literal match"
+        );
+
+        // And a standalone occurrence is reached just the same.
+        let mut d = doc("hello he");
+        d.select_range(0..2);
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(2));
+        assert_eq!(d.carets()[1].selection(), Some(6..8));
     }
 
     #[test]

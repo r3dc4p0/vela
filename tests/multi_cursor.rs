@@ -164,6 +164,33 @@ fn next_occurrence_keeps_stacked_cursors() {
 }
 
 #[test]
+fn next_occurrence_matches_a_partial_word() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "hello help");
+    ctrl(&mut app, KeyCode::Home);
+    press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
+    press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
+    assert_eq!(
+        app.active_doc().unwrap().selection(),
+        Some(0..2),
+        "`he` is selected"
+    );
+
+    ctrl(&mut app, 'd');
+    assert_eq!(caret_count(&app), 2);
+    assert_eq!(
+        caret_positions(&app),
+        vec![2, 8],
+        "the `he` inside `help` gets a cursor: matching is literal"
+    );
+
+    type_str(&mut app, "HE");
+    assert_eq!(text(&app), "HEllo HElp");
+}
+
+#[test]
 fn undo_restores_the_text_and_the_cursors() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());
