@@ -34,6 +34,10 @@ show_indent_guides = true
 highlight_cursor_line = true
 # Highlight the bracket pair around the cursor.
 match_brackets = true
+# Wrap long lines at the window width instead of scrolling sideways. While it is
+# on, the wheel and the arrow keys step by visual rows, so one long line can fill
+# the window. Toggle at runtime with Alt+W.
+word_wrap = false
 # Undo limits. Older entries are dropped first.
 max_undo_entries = 5000
 max_undo_mb = 64

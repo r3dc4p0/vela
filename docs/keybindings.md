@@ -96,6 +96,14 @@ horizontally once the longest line ends.
 | `Ctrl+Shift+P` | `help.commandPalette` | Command palette |
 | `Ctrl+Shift+T` | `view.toggleTheme` | Dark / light |
 | `Alt+Z` | `view.toggleWhitespace` | Show tabs, spaces and control characters |
+| `Alt+W` | `view.toggleWordWrap` | Wrap long lines at the window width |
+
+Word wrap is a session setting rather than a per-buffer one: the wrap width is a
+property of the window, so toggling it affects every buffer. It can also be set
+in configuration with `[editor] word_wrap = true`. While wrapping is on there is
+nothing to scroll to horizontally, so the horizontal wheel does nothing; the
+vertical wheel and the cursor motions step by *rows*, not by lines, so a single
+wrapped line can fill the window and be scrolled through.
 
 ## Terminal limitations (read this)
 

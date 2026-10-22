@@ -9,6 +9,7 @@ pub mod motion;
 pub mod scan;
 pub mod storage;
 pub mod undo;
+pub mod wrap;
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -21,6 +22,7 @@ use crate::syntax::Language;
 pub use motion::{Motion, MotionCtx};
 pub use storage::{RopeStorage, Snapshot, TextStorage};
 pub use undo::TxKind;
+pub use wrap::{LayoutCache, LineLayout, Segment};
 
 /// Longest line the renderer will materialise in one go, in characters.
 ///
@@ -192,6 +194,13 @@ pub struct Document {
     language: Language,
     /// First visible line.
     scroll_top: usize,
+    /// First visible visual row *within* `scroll_top`.
+    ///
+    /// Zero unless word wrap is on and the top line is taller than one row.
+    /// Storing the viewport as `(line, row)` rather than as a single global
+    /// visual-row index is what keeps scrolling O(rows on screen): a global
+    /// index would have to add up the height of every line above it.
+    scroll_row: usize,
     /// First visible display column.
     scroll_left: usize,
     /// Rows available in the last render (used to centre jumps).
@@ -229,6 +238,7 @@ impl Document {
             bom: false,
             language: Language::Plain,
             scroll_top: 0,
+            scroll_row: 0,
             scroll_left: 0,
             viewport_rows: 20,
             view_detached: false,
@@ -381,8 +391,30 @@ impl Document {
         self.scroll_top
     }
 
+    /// Set the first visible line, discarding any sub-row offset.
+    ///
+    /// Anything that jumps the view to a *line* — a goto, a search result, a
+    /// re-centring — means "start at the top of this line", so the offset is
+    /// cleared rather than left pointing into the middle of it.
     pub fn set_scroll_top(&mut self, value: usize) {
         self.scroll_top = value.min(self.line_count().saturating_sub(1));
+        self.scroll_row = 0;
+    }
+
+    /// First visible visual row within [`scroll_top`](Self::scroll_top).
+    pub fn scroll_row(&self) -> usize {
+        self.scroll_row
+    }
+
+    /// Set the sub-row offset without touching the top line.
+    pub fn set_scroll_row(&mut self, value: usize) {
+        self.scroll_row = value;
+    }
+
+    /// Set both halves of the viewport top in one step.
+    pub fn set_view_top(&mut self, top: usize, row: usize) {
+        self.set_scroll_top(top);
+        self.scroll_row = row;
     }
 
     pub fn scroll_left(&self) -> usize {
@@ -441,6 +473,35 @@ impl Document {
             widest = widest.max(width);
         }
         widest
+    }
+
+    /// Visual rows occupied by `line` when wrapped at `wrap_width`.
+    pub fn line_height(&self, line: usize, wrap_width: Option<usize>, tab_width: usize) -> usize {
+        let mut cache = LayoutCache::new(wrap_width, tab_width);
+        cache.height(self.storage.as_ref(), line)
+    }
+
+    /// Line of the last visual row the viewport shows.
+    ///
+    /// With wrapping on this is not `scroll_top + rows`: a single line can fill
+    /// the window, so the status bar cannot tell whether the caret is on screen
+    /// by comparing line numbers alone.
+    pub fn last_visible_line(
+        &self,
+        wrap_width: Option<usize>,
+        tab_width: usize,
+        rows: usize,
+    ) -> usize {
+        let mut cache = LayoutCache::new(wrap_width, tab_width);
+        cache
+            .row_at(
+                self.storage.as_ref(),
+                self.scroll_top,
+                self.scroll_row,
+                rows.max(1).saturating_sub(1),
+            )
+            .map(|(line, _)| line)
+            .unwrap_or_else(|| self.line_count().saturating_sub(1))
     }
 
     // ---------------------------------------------------------------- cursor
@@ -1121,6 +1182,9 @@ impl Document {
     fn center_scroll(&mut self, line: usize) {
         let rows = self.viewport_rows;
         self.scroll_top = line.saturating_sub(rows / 2);
+        // A jump lands on the top of a line, not halfway down whatever line the
+        // view was scrolled into before it.
+        self.scroll_row = 0;
     }
 
     /// Statistics shown by the word count command.

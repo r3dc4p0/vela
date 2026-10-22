@@ -14,6 +14,8 @@ Ordered by what a user notices first, not by what is easiest.
 - Multi-cursor: stacked carets, select-next-occurrence, Alt+Click, one undo step
 - Mouse: click, drag-selection with edge autoscroll, double/triple-click,
   free wheel scrolling with an off-screen cursor indicator, tab switching
+- Word wrap, toggled at runtime: rows are the unit of scrolling, motion and
+  hit-testing, and a single line can fill the window
 - Recent files, session restore, configuration with validation, logging
 - Terminal restoration on panic and on `SIGTERM`/`SIGINT`/`SIGHUP`/`SIGQUIT`
 - Encoding detection (UTF-8, UTF-16 with BOM), LF/CRLF/CR round-tripping

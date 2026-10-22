@@ -243,6 +243,7 @@ impl App {
         MotionCtx {
             tab_width: self.config.tab_width(),
             page,
+            wrap_width: self.wrap_width(),
         }
     }
 
@@ -459,6 +460,23 @@ impl App {
         (self.last_editor_area.width as usize).saturating_sub(gutter as usize)
     }
 
+    /// Width to wrap at, or `None` when wrapping is off or the editor has not
+    /// been laid out yet.
+    ///
+    /// Zero columns would wrap every line to a single character, so an unknown
+    /// width has to mean "no wrapping" rather than "wrap at zero".
+    pub fn wrap_width(&self) -> Option<usize> {
+        if !self.config.editor.word_wrap {
+            return None;
+        }
+        let width = self.text_width();
+        if width == 0 {
+            None
+        } else {
+            Some(width)
+        }
+    }
+
     /// Map a screen position inside the editor to a buffer character index.
     fn buffer_position_at(&self, column: u16, row: u16) -> Option<usize> {
         let area = self.last_editor_area;
@@ -475,11 +493,36 @@ impl App {
             return None;
         }
         let rel_row = (row - area.y) as usize;
+        let target = (column - area.x - gutter) as usize;
+
+        // A wrapped row is one segment of a line, and rows no longer count
+        // lines: ask the same layout the renderer used which row the pointer is
+        // on before deciding which character it is.
+        if let Some(width) = self.wrap_width() {
+            let mut cache = crate::buffer::LayoutCache::new(Some(width), cfg.tab_width());
+            let storage = doc.storage();
+            let (line, seg) = cache.row_at(storage, doc.scroll_top(), doc.scroll_row(), rel_row)?;
+            let offset = match cache.layout(storage, line) {
+                Some(layout) => layout.pos_at(seg, target, cfg.tab_width()),
+                // Too long to wrap, so it is painted as one row from a window
+                // and the column is measured against the whole line.
+                None => {
+                    crate::buffer::motion::char_at_visual_col(
+                        &storage.line_slice(line),
+                        target,
+                        cfg.tab_width(),
+                    )
+                    .0
+                }
+            };
+            return Some(storage.line_start(line) + offset);
+        }
+
         let line = doc.scroll_top() + rel_row;
         if line >= doc.line_count() {
             return None;
         }
-        let target_col = (column - area.x - gutter) as usize + doc.scroll_left();
+        let target_col = target + doc.scroll_left();
         let line_start = doc.storage().line_start(line);
         let text = doc.line_text(line);
         let (offset, _) =
@@ -499,13 +542,42 @@ impl App {
         let doc = &self.buffers[self.active_index()?];
         let cfg = &self.config;
         let row = row.clamp(area.y, area.y + area.height - 1);
+        let gutter = self.gutter_width(doc);
+        let target = if column < area.x + gutter {
+            0
+        } else {
+            (column - area.x - gutter) as usize
+        };
+
+        if let Some(width) = self.wrap_width() {
+            let mut cache = crate::buffer::LayoutCache::new(Some(width), cfg.tab_width());
+            let storage = doc.storage();
+            let rel_row = (row - area.y) as usize;
+            let last = doc.line_count().saturating_sub(1);
+            // Past the last row, keep extending along the final line.
+            let (line, seg) = cache
+                .row_at(storage, doc.scroll_top(), doc.scroll_row(), rel_row)
+                .unwrap_or((last, 0));
+            let offset = match cache.layout(storage, line) {
+                Some(layout) => layout.pos_at(seg, target, cfg.tab_width()),
+                None => {
+                    crate::buffer::motion::char_at_visual_col(
+                        &storage.line_slice(line),
+                        target,
+                        cfg.tab_width(),
+                    )
+                    .0
+                }
+            };
+            return Some(storage.line_start(line) + offset);
+        }
+
         let line =
             (doc.scroll_top() + (row - area.y) as usize).min(doc.line_count().saturating_sub(1));
-        let gutter = self.gutter_width(doc);
         let target_col = if column < area.x + gutter {
             0
         } else {
-            (column - area.x - gutter) as usize + doc.scroll_left()
+            target + doc.scroll_left()
         };
         let line_start = doc.storage().line_start(line);
         let text = doc.line_text(line);
@@ -634,17 +706,33 @@ impl App {
     /// whole buffer and leaves the caret where it was, even off screen. The
     /// view stops following the cursor until the next cursor movement, which
     /// is what lets it go further than one page away from the caret.
+    ///
+    /// The step is in *visual rows*, so one notch of the wheel moves the text
+    /// by the same number of lines on screen whether or not lines are wrapped.
     fn scroll_by(&mut self, delta: isize) {
         let Some(idx) = self.active_index() else {
             return;
         };
+        let wrap = self.wrap_width();
+        let tab_width = self.config.tab_width();
+        let rows = self.buffers[idx].viewport_rows().max(1);
         let doc = &mut self.buffers[idx];
-        let top = doc.scroll_top() as isize + delta;
-        // Stop at the last full page rather than at the last line, so the
-        // buffer never scrolls up into a screen of blank rows.
-        let rows = doc.viewport_rows().max(1);
-        let max = doc.line_count().saturating_sub(rows) as isize;
-        doc.set_scroll_top(top.clamp(0, max) as usize);
+
+        let mut cache = crate::buffer::LayoutCache::new(wrap, tab_width);
+        let (top, sub) = cache.shift(doc.storage(), doc.scroll_top(), doc.scroll_row(), delta);
+        // Stop at the last full page rather than at the last row, so the buffer
+        // never scrolls up into a screen of blank rows. The last page starts at
+        // the *last row* of the last line, which is not the same thing when one
+        // wrapped line is taller than the window.
+        let last = doc.line_count().saturating_sub(1);
+        let last_row = cache.height(doc.storage(), last).saturating_sub(1);
+        let (max_top, max_sub) = cache.shift(doc.storage(), last, last_row, -(rows as isize - 1));
+        let (top, sub) = if (top, sub) > (max_top, max_sub) {
+            (max_top, max_sub)
+        } else {
+            (top, sub)
+        };
+        doc.set_view_top(top, sub);
         doc.detach_view();
     }
 
@@ -652,8 +740,13 @@ impl App {
     ///
     /// The view stops once the widest line on screen ends: past that point
     /// every visible cell is blank, and scrolling into it would feel like an
-    /// endless canvas.
+    /// endless canvas. With word wrap on there is nothing to scroll to — every
+    /// row already fits — so the gesture is ignored rather than allowed to
+    /// shift a view that has no horizontal offset.
     fn scroll_sideways(&mut self, delta: isize) {
+        if self.config.editor.word_wrap {
+            return;
+        }
         let Some(idx) = self.active_index() else {
             return;
         };
@@ -916,6 +1009,7 @@ impl App {
                     on_off(self.config.editor.highlight_cursor_line)
                 ));
             }
+            Command::ToggleWordWrap => self.toggle_word_wrap(),
             Command::WordCount => self.word_count(),
             Command::ShowStats => self.show_stats(),
             Command::Help => self.open_help(),
@@ -1096,6 +1190,28 @@ impl App {
             doc.eol().label(),
             doc.encoding().label()
         ));
+    }
+
+    /// Turn word wrap on or off.
+    ///
+    /// The wrap width is a property of the window rather than of the buffer, so
+    /// this is a session setting like line numbers, not a per-buffer mode.
+    /// Toggling it invalidates both halves of the viewport: the horizontal
+    /// offset has no meaning in a wrapped view, and the sub-row offset points
+    /// into a row that the other mode may not have.
+    fn toggle_word_wrap(&mut self) {
+        self.config.editor.word_wrap = !self.config.editor.word_wrap;
+        let on = self.config.editor.word_wrap;
+        if let Some(doc) = self.active_doc_mut() {
+            if on {
+                doc.set_scroll_left(0);
+            }
+            doc.set_scroll_row(0);
+            // Let the view find the caret again: it was scrolled to a row that
+            // just changed identity.
+            doc.attach_view();
+        }
+        self.info(format!("Word wrap {}", on_off(on)));
     }
 
     fn toggle_theme(&mut self) {

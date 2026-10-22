@@ -12,6 +12,7 @@
 //!   not re-lex the document.
 
 use std::ops::Range;
+use std::rc::Rc;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
@@ -19,7 +20,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::Frame;
 
 use crate::buffer::motion::{char_width, visual_col_of};
-use crate::buffer::{Document, WHOLE_LINE_LIMIT};
+use crate::buffer::{Document, LayoutCache, LineLayout, Segment, TextStorage, WHOLE_LINE_LIMIT};
 use crate::config::Config;
 use crate::search::SearchState;
 use crate::syntax::{self, StateCache, Token};
@@ -40,7 +41,10 @@ struct Window {
 fn line_window(doc: &Document, line: usize, left: usize, cells: usize, tab_width: usize) -> Window {
     let storage = doc.storage();
     let line_start = storage.line_start(line);
-    let line_len = storage.line_slice(line).chars().count();
+    // Measured, not counted from a copy: a single-line file can be gigabytes,
+    // and materialising it to find out how long it is would cost more than
+    // everything else on the frame put together.
+    let line_len = storage.line_len(line);
 
     if line_len <= WHOLE_LINE_LIMIT {
         let text = storage.line_slice(line);
@@ -140,6 +144,9 @@ struct PaintCtx<'a> {
 
 /// Paint one line into `row`. Returns the screen position of the cursor when it
 /// is on this line.
+///
+/// `row_wrapped` marks a row that is one segment of a wrapped line: what does
+/// not fit there is on the next row, so the truncation marker would be a lie.
 #[allow(clippy::too_many_arguments)]
 fn paint_line(
     buf: &mut Buffer,
@@ -151,6 +158,7 @@ fn paint_line(
     window: &Window,
     chars: &[char],
     tokens: &[Token],
+    row_wrapped: bool,
 ) -> Option<Position> {
     let theme = ctx.theme;
     let right = ctx.text_x + ctx.text_w as u16;
@@ -301,14 +309,123 @@ fn paint_line(
             .set_style(Style::default().bg(theme.cursor_bg));
     }
 
-    // Truncation marker when the line continues past the right edge.
-    if ci < chars.len() && right > ctx.text_x {
+    // Truncation marker when the line continues past the right edge. A wrapped
+    // row never does — what does not fit is on the next row — so the marker
+    // only appears for the unwrapped view and for a row of a line too long to
+    // wrap at all.
+    if ci < chars.len() && right > ctx.text_x && !row_wrapped {
         buf[(right - 1, row)]
             .set_symbol("›")
             .set_style(Style::default().fg(theme.dim).bg(theme.bg));
     }
 
     cursor_pos
+}
+
+/// One painted row of the editor.
+///
+/// Without word wrap a row is a line. With it, a row is one segment of a line,
+/// and the same line can fill the whole window — so every consumer of "row N"
+/// has to say which of the two it means.
+enum Row {
+    /// A whole line, painted through the horizontally scrolled window.
+    Plain { line: usize },
+    /// One wrapped segment of a line.
+    Wrapped {
+        line: usize,
+        seg: usize,
+        layout: Rc<LineLayout>,
+    },
+}
+
+impl Row {
+    fn line(&self) -> usize {
+        match self {
+            Row::Plain { line } | Row::Wrapped { line, .. } => *line,
+        }
+    }
+}
+
+/// The rows the window shows, top to bottom, starting at `(top, sub)`.
+///
+/// Stops at the end of the buffer rather than padding with blanks: the caller
+/// paints `~` for whatever is missing.
+fn fill_rows(
+    cache: &mut LayoutCache,
+    storage: &dyn TextStorage,
+    top: usize,
+    sub: usize,
+    rows: usize,
+    line_count: usize,
+) -> Vec<Row> {
+    let mut out = Vec::with_capacity(rows);
+    if line_count == 0 {
+        return out;
+    }
+    if !cache.wraps() {
+        for row in 0..rows {
+            let line = top + row;
+            if line >= line_count {
+                break;
+            }
+            out.push(Row::Plain { line });
+        }
+        return out;
+    }
+
+    let mut line = top.min(line_count - 1);
+    let mut seg = sub;
+    while out.len() < rows && line < line_count {
+        let Some(layout) = cache.layout(storage, line) else {
+            // Too long to wrap: one row, painted through the plain path.
+            out.push(Row::Plain { line });
+            line += 1;
+            seg = 0;
+            continue;
+        };
+        if seg >= layout.height() {
+            line += 1;
+            seg = 0;
+            continue;
+        }
+        while seg < layout.height() && out.len() < rows {
+            out.push(Row::Wrapped {
+                line,
+                seg,
+                layout: Rc::clone(&layout),
+            });
+            seg += 1;
+        }
+        if seg >= layout.height() {
+            line += 1;
+            seg = 0;
+        }
+    }
+    out
+}
+
+/// Restrict line-relative tokens to one segment, re-based on the segment.
+///
+/// `paint_line` indexes tokens from the start of what it paints, so a token
+/// that began on an earlier row has to be clipped and shifted, not dropped.
+fn clip_tokens(tokens: &[Token], seg: Segment) -> Vec<Token> {
+    let mut out = Vec::new();
+    for t in tokens {
+        let lo = t.start.max(seg.char_off);
+        let hi = t.end().min(seg.end_char());
+        // A token entirely before this row has `hi < lo`; one entirely after it
+        // has `hi == lo`. Neither belongs here. (The subtraction has to stay
+        // inside the branch: `then_some` would evaluate it for the dropped
+        // tokens too and underflow.)
+        if hi > lo {
+            out.push(Token {
+                start: lo - seg.char_off,
+                len: hi - lo,
+                kind: t.kind,
+            });
+        }
+    }
+    out
 }
 
 /// Everything the editor needs to draw itself.
@@ -332,27 +449,7 @@ impl EditorRenderer<'_> {
 
         let tab_width = self.cfg.tab_width();
         let line_count = self.doc.line_count();
-        let (cur_line, _) = self.doc.cursor_line_col();
-
-        // --- vertical scroll -------------------------------------------------
-        // The viewport is normally re-derived from the cursor every frame, so
-        // that motions keep the caret on screen. A scroll gesture detaches it:
-        // the user asked to look somewhere else, and snapping back on the next
-        // draw would undo the gesture. `attach_view` is called by every cursor
-        // movement, so the editor resumes following as soon as one happens.
-        let scroll_off = self.cfg.editor.scroll_off.min(rows.saturating_sub(1) / 2);
-        let mut top = self.doc.scroll_top().min(line_count.saturating_sub(1));
-        let following = !self.doc.view_detached();
-        if following {
-            if cur_line < top + scroll_off {
-                top = cur_line.saturating_sub(scroll_off);
-            }
-            if cur_line + scroll_off >= top + rows {
-                top = (cur_line + scroll_off + 1).saturating_sub(rows);
-            }
-            top = top.min(line_count.saturating_sub(1));
-        }
-        self.doc.set_scroll_top(top);
+        let (cur_line, cur_off) = self.doc.cursor_line_col();
 
         // --- layout ----------------------------------------------------------
         let digits = decimal_digits(line_count).max(3);
@@ -363,37 +460,109 @@ impl EditorRenderer<'_> {
         if text_w == 0 {
             return;
         }
+        // How wide a row may be. `text_w` is the whole budget: a wrapped row
+        // starts at the left edge of the text area, so it can use all of it.
+        let wrap_width = if self.cfg.editor.word_wrap {
+            Some(text_w)
+        } else {
+            None
+        };
 
-        // --- horizontal scroll ----------------------------------------------
-        // Same rule as above: a detached view keeps the column the wheel left
-        // it on instead of being pulled back to the caret.
-        let cur_col = cursor_visual_col(self.doc, cur_line, tab_width);
-        let cur_line_len = self.doc.storage().line_slice(cur_line).chars().count();
-        let mut left = self.doc.scroll_left();
-        if following {
-            if cur_line_len < WHOLE_LINE_LIMIT {
-                let start = self.doc.storage().line_start(cur_line);
-                let width =
-                    visual_col_of(self.doc.storage(), start, start + cur_line_len, tab_width);
-                if width <= text_w {
-                    left = 0;
+        // --- vertical scroll -------------------------------------------------
+        // The viewport is normally re-derived from the cursor every frame, so
+        // that motions keep the caret on screen. A scroll gesture detaches it:
+        // the user asked to look somewhere else, and snapping back on the next
+        // draw would undo the gesture. `attach_view` is called by every cursor
+        // movement, so the editor resumes following as soon as one happens.
+        //
+        // The viewport is `(line, row)` and the arithmetic is in visual rows,
+        // so wrapping changes where a row comes from but not the rule: keep the
+        // cursor's row between `scroll_off` and the bottom edge.
+        let scroll_off = self.cfg.editor.scroll_off.min(rows.saturating_sub(1) / 2);
+        let following = !self.doc.view_detached();
+        let (top, sub, left, visible) = {
+            let storage = self.doc.storage();
+            let mut cache = LayoutCache::new(wrap_width, tab_width);
+            let mut top = self.doc.scroll_top().min(line_count.saturating_sub(1));
+            let mut sub = if wrap_width.is_some() {
+                self.doc.scroll_row()
+            } else {
+                0
+            };
+
+            if following {
+                if cur_line < top {
+                    top = cur_line;
+                    sub = 0;
+                }
+                let lo = scroll_off as isize;
+                let hi = rows.saturating_sub(1).saturating_sub(scroll_off) as isize;
+                match cache.cursor_row(storage, top, sub, cur_line, cur_off, rows * 32) {
+                    Some(abs) if abs < lo => {
+                        let (t, s) = cache.shift(storage, top, sub, abs - lo);
+                        top = t;
+                        sub = s;
+                    }
+                    Some(abs) if abs > hi => {
+                        let (t, s) = cache.shift(storage, top, sub, abs - hi);
+                        top = t;
+                        sub = s;
+                    }
+                    Some(_) => {}
+                    None => {
+                        // Too far below to walk to in a reasonable time: this
+                        // was a jump, not a move. Show the cursor's row at the
+                        // bottom of the window rather than scrolling to it.
+                        let (t, s) = cache.shift(storage, cur_line, 0, hi);
+                        top = t;
+                        sub = s;
+                    }
                 }
             }
-            if cur_col < left {
-                left = cur_col;
-            } else if cur_col >= left + text_w {
-                left = cur_col + 1 - text_w;
+
+            let visible = fill_rows(&mut cache, storage, top, sub, rows, line_count);
+
+            // --- horizontal scroll -------------------------------------------
+            // Meaningless when wrapped: every row already fits, so the offset
+            // stays at zero and toggling wrap off does not jump sideways.
+            let mut left = if wrap_width.is_some() {
+                0
+            } else {
+                self.doc.scroll_left()
+            };
+            if wrap_width.is_none() {
+                let cur_col = cursor_visual_col(self.doc, cur_line, tab_width);
+                let cur_line_len = storage.line_len(cur_line);
+                if following {
+                    if cur_line_len < WHOLE_LINE_LIMIT {
+                        let start = storage.line_start(cur_line);
+                        let width = visual_col_of(storage, start, start + cur_line_len, tab_width);
+                        if width <= text_w {
+                            left = 0;
+                        }
+                    }
+                    if cur_col < left {
+                        left = cur_col;
+                    } else if cur_col >= left + text_w {
+                        left = cur_col + 1 - text_w;
+                    }
+                } else {
+                    // A detached view keeps the column the wheel left it on,
+                    // but never past the end of the widest visible line: there
+                    // is nothing to see there.
+                    let limit = self
+                        .doc
+                        .visible_width(tab_width, rows)
+                        .saturating_sub(text_w);
+                    left = left.min(limit);
+                }
             }
-        } else {
-            // A detached view keeps the column the wheel left it on, but never
-            // past the end of the widest visible line: there is nothing to see
-            // there.
-            let limit = self
-                .doc
-                .visible_width(tab_width, rows)
-                .saturating_sub(text_w);
-            left = left.min(limit);
-        }
+
+            (top, sub, left, visible)
+        };
+        // `set_scroll_top` clears the sub-row, so the order matters.
+        self.doc.set_scroll_top(top);
+        self.doc.set_scroll_row(sub);
         self.doc.set_scroll_left(left);
 
         let theme = self.theme;
@@ -439,50 +608,60 @@ impl EditorRenderer<'_> {
         let syntax_on = self.cfg.editor.syntax_highlighting && lang.has_highlighting();
         let mut cursor_pos: Option<Position> = None;
         let mut scratch_tokens: Vec<Token> = Vec::new();
+        // A wrapped line is lexed once and each of its rows gets a slice:
+        // lexing a row on its own would restart the lexer in the default state
+        // and paint a continuation row of a string or comment as code.
+        let mut line_tokens: Vec<Token> = Vec::new();
+        let mut lexed_line: Option<usize> = None;
 
         for row in 0..rows {
             let y = area.y + row as u16;
-            let line = top + row;
 
             // ---------------- gutter ----------------
-            if show_numbers {
-                if line >= line_count {
+            let Some(entry) = visible.get(row) else {
+                // Past the end of the buffer: nothing left but the marker.
+                if show_numbers {
                     buf.set_string(
                         area.x,
                         y,
                         " ".repeat(digits),
                         Style::default().fg(theme.dim),
                     );
-                } else {
-                    let (n, style) = if line == cur_line {
-                        (
-                            line + 1,
-                            Style::default()
-                                .fg(theme.gutter_active_fg)
-                                .add_modifier(Modifier::BOLD),
-                        )
-                    } else if self.cfg.editor.relative_numbers {
-                        (
-                            line.abs_diff(cur_line),
-                            Style::default().fg(theme.gutter_fg),
-                        )
-                    } else {
-                        (line + 1, Style::default().fg(theme.gutter_fg))
-                    };
-                    let label = n.to_string();
-                    let pad = digits.saturating_sub(label.chars().count());
-                    let mut s = String::with_capacity(digits);
-                    for _ in 0..pad {
-                        s.push(' ');
-                    }
-                    s.push_str(&label);
-                    buf.set_string(area.x, y, &s, style);
                 }
-            }
-
-            if line >= line_count {
                 buf.set_string(text_x, y, "~", Style::default().fg(theme.dim).bg(theme.bg));
                 continue;
+            };
+            let line = entry.line();
+            // A wrapped line shows its number once, on its first row.
+            let first_row_of_line = match entry {
+                Row::Plain { .. } => true,
+                Row::Wrapped { seg, .. } => *seg == 0,
+            };
+
+            if show_numbers && first_row_of_line {
+                let (n, style) = if line == cur_line {
+                    (
+                        line + 1,
+                        Style::default()
+                            .fg(theme.gutter_active_fg)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else if self.cfg.editor.relative_numbers {
+                    (
+                        line.abs_diff(cur_line),
+                        Style::default().fg(theme.gutter_fg),
+                    )
+                } else {
+                    (line + 1, Style::default().fg(theme.gutter_fg))
+                };
+                let label = n.to_string();
+                let pad = digits.saturating_sub(label.chars().count());
+                let mut s = String::with_capacity(digits);
+                for _ in 0..pad {
+                    s.push(' ');
+                }
+                s.push_str(&label);
+                buf.set_string(area.x, y, &s, style);
             }
 
             // ---------------- row background ----------------
@@ -495,8 +674,18 @@ impl EditorRenderer<'_> {
             // ---------------- content ----------------
             let storage = self.doc.storage();
             let line_start = storage.line_start(line);
-            let line_len = storage.line_slice(line).chars().count();
-            let window = line_window(self.doc, line, left, text_w, tab_width);
+            let line_len = storage.line_len(line);
+            let window = match entry {
+                Row::Plain { .. } => line_window(self.doc, line, left, text_w, tab_width),
+                Row::Wrapped { seg, layout, .. } => {
+                    let s = layout.segments()[*seg];
+                    Window {
+                        text: layout.chars()[s.char_off..s.end_char()].iter().collect(),
+                        start_char: s.char_off,
+                        start_col: s.start_col,
+                    }
+                }
+            };
             let chars: Vec<char> = window.text.chars().collect();
 
             if ctx.show_guides {
@@ -508,8 +697,20 @@ impl EditorRenderer<'_> {
                 let state = self
                     .cache
                     .state_for(line, &mut |l| storage.line_slice(l), lang);
-                let (tokens, _) = syntax::lex_line(lang, &window.text, state);
-                scratch_tokens = tokens;
+                match entry {
+                    Row::Plain { .. } => {
+                        let (tokens, _) = syntax::lex_line(lang, &window.text, state);
+                        scratch_tokens = tokens;
+                    }
+                    Row::Wrapped { seg, layout, .. } => {
+                        if lexed_line != Some(line) {
+                            let (tokens, _) = syntax::lex_line(lang, layout.text(), state);
+                            line_tokens = tokens;
+                            lexed_line = Some(line);
+                        }
+                        scratch_tokens = clip_tokens(&line_tokens, layout.segments()[*seg]);
+                    }
+                }
             }
 
             // Paint the row; the renderer owns row placement.
@@ -523,6 +724,7 @@ impl EditorRenderer<'_> {
                 &window,
                 &chars,
                 &scratch_tokens,
+                matches!(entry, Row::Wrapped { .. }),
             ) {
                 if pos.x < area.x + area.width {
                     cursor_pos = Some(pos);

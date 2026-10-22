@@ -36,6 +36,14 @@ pub trait TextStorage: Debug + Send {
     /// Characters of `line`, excluding the trailing line break.
     fn line_slice(&self, line: usize) -> String;
 
+    /// Number of characters in `line`, excluding the trailing line break.
+    ///
+    /// Separate from `line_slice(line).chars().count()` because the answer is
+    /// sometimes needed to decide *whether* to materialise the line at all: a
+    /// single-line file can be gigabytes, and copying it to measure it is the
+    /// cost the caller is trying to avoid.
+    fn line_len(&self, line: usize) -> usize;
+
     /// Character index at which `line` starts.
     fn line_start(&self, line: usize) -> usize;
 
@@ -162,6 +170,25 @@ impl TextStorage for RopeStorage {
             s.pop();
         }
         s
+    }
+
+    fn line_len(&self, line: usize) -> usize {
+        if line >= self.rope.len_lines() {
+            return 0;
+        }
+        let slice = self.rope.line(line);
+        let len = slice.len_chars();
+        // `Rope::line` includes the line break; strip it, counting CRLF as one.
+        if len > 0 && slice.char(len - 1) == '\n' {
+            let without_lf = len - 1;
+            if without_lf > 0 && slice.char(without_lf - 1) == '\r' {
+                without_lf - 1
+            } else {
+                without_lf
+            }
+        } else {
+            len
+        }
     }
 
     fn line_start(&self, line: usize) -> usize {

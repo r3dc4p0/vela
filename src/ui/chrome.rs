@@ -252,12 +252,17 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
     // readout alone is misleading: it names a line the user cannot see. Say
     // where the caret actually is, in its own colour and with an arrow for the
     // direction to scroll back.
+    //
+    // With wrapping on, the last visible line is not `top + rows` — a single
+    // line can fill the window — so it has to be measured the same way the
+    // renderer laid the rows out.
     let cur_line = line.saturating_sub(1);
     let top = doc.scroll_top();
     let rows = doc.viewport_rows();
+    let last_visible = doc.last_visible_line(app.wrap_width(), app.config.tab_width(), rows);
     let away = if cur_line < top {
         Some('↑')
-    } else if cur_line >= top + rows {
+    } else if cur_line > last_visible {
         Some('↓')
     } else {
         None

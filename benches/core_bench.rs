@@ -211,6 +211,7 @@ fn bench_editing(c: &mut Criterion) {
         let ctx = MotionCtx {
             tab_width: 4,
             page: 40,
+            wrap_width: None,
         };
         b.iter(|| {
             doc.move_cursor(Motion::Up, false, ctx);

@@ -5,6 +5,7 @@
 //! search range validity, and EOL round-tripping.
 
 use proptest::prelude::*;
+use vela::buffer::wrap::LineLayout;
 use vela::buffer::{Document, Motion, MotionCtx};
 use vela::filesystem::{self, Encoding, Eol};
 use vela::search::{find_all, Query};
@@ -40,15 +41,54 @@ proptest! {
     #[test]
     fn cursor_stays_inside_the_document(text in any_text()) {
         let mut doc = doc_with(&text);
-        let ctx = MotionCtx { tab_width: 4, page: 10 };
         let motions = [
             Motion::Left, Motion::Right, Motion::WordLeft, Motion::WordRight,
             Motion::Up, Motion::Down, Motion::LineStart, Motion::LineEnd,
             Motion::DocStart, Motion::DocEnd, Motion::PageUp, Motion::PageDown,
         ];
-        for (i, m) in motions.iter().enumerate() {
-            doc.move_cursor(*m, i % 2 == 0, ctx);
-            prop_assert!(doc.cursor() <= doc.len_chars());
+        // Wrapping turns the vertical motions from line steps into row steps,
+        // and a narrow width is where an off-by-one in that arithmetic shows
+        // up: a row holds one character, so every boundary is exercised.
+        for width in [None, Some(1), Some(7), Some(40)] {
+            let ctx = MotionCtx { tab_width: 4, page: 10, wrap_width: width };
+            for (i, m) in motions.iter().enumerate() {
+                doc.move_cursor(*m, i % 2 == 0, ctx);
+                prop_assert!(doc.cursor() <= doc.len_chars());
+            }
+        }
+    }
+
+    /// Wrapping partitions the line: every character lands in exactly one row,
+    /// in order, with no empty rows in between.
+    #[test]
+    fn wrap_partitions_every_line(text in any_text(), width in 1usize..60) {
+        for line in text.split('\n') {
+            let layout = LineLayout::new(line, width, 4);
+            let mut next = 0usize;
+            for seg in layout.segments() {
+                prop_assert_eq!(seg.char_off, next, "rows must be contiguous");
+                prop_assert!(seg.chars > 0 || line.is_empty(), "empty row in {:?}", line);
+                next = seg.end_char();
+            }
+            prop_assert_eq!(next, line.chars().count(), "rows must cover {:?}", line);
+        }
+    }
+
+    /// A cursor placed on any character of any line stays on that character
+    /// when it is asked which row it is on and back again.
+    #[test]
+    fn wrap_round_trips_every_position(text in any_text(), width in 1usize..40) {
+        for line in text.split('\n') {
+            let layout = LineLayout::new(line, width, 4);
+            for (i, _) in line.chars().enumerate() {
+                let row = layout.row_of(i);
+                let seg = layout.segments()[row];
+                let col = layout.chars()[seg.char_off..i]
+                    .iter()
+                    .fold(seg.start_col, |c, &ch| c + vela::buffer::motion::char_width(ch, c, 4))
+                    - seg.start_col;
+                prop_assert_eq!(layout.pos_at(row, col, 4), i);
+            }
         }
     }
 

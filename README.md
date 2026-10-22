@@ -59,8 +59,10 @@ palette (`Ctrl+Shift+P`), help screen generated from the live keymap.
 
 **Interface** — line-number gutter (absolute or relative), syntax highlighting
 for 17 languages, dark and light themes, visible whitespace, indent guides,
-contextual shortcut hints, a notification area, and graceful degradation down to
-a one-row terminal.
+word wrap (`Alt+W`), contextual shortcut hints, a notification area, and
+graceful degradation down to a one-row terminal. Wrapping is not a cosmetic
+layer: the wheel, the arrow keys, page keys and the mouse all move by visual
+rows, so a single long line can fill the window and be edited like any other.
 
 ## Install
 
@@ -139,6 +141,7 @@ auto_indent = true
 syntax_highlighting = true
 relative_numbers = false
 show_whitespace = false
+word_wrap = false
 
 [ui]
 theme = "vela-dark"        # or "vela-light"

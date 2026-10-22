@@ -9,6 +9,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
 use super::storage::TextStorage;
+use super::wrap::LineLayout;
+use super::WHOLE_LINE_LIMIT;
 
 /// How far we look back/forward when resolving grapheme boundaries. Any cluster
 /// longer than this is pathological; we degrade to a single character step
@@ -42,6 +44,13 @@ pub enum Motion {
 pub struct MotionCtx {
     pub tab_width: usize,
     pub page: usize,
+    /// Columns a visual row is wrapped at, when word wrap is on.
+    ///
+    /// Carried here rather than read from the document because the wrap width
+    /// is a property of the terminal, and `Document` deliberately knows nothing
+    /// about terminals. `None` means one visual row per line, and the vertical
+    /// motions below then move line by line.
+    pub wrap_width: Option<usize>,
 }
 
 impl Default for MotionCtx {
@@ -49,6 +58,7 @@ impl Default for MotionCtx {
         Self {
             tab_width: 4,
             page: 20,
+            wrap_width: None,
         }
     }
 }
@@ -224,6 +234,95 @@ pub fn word_end(storage: &dyn TextStorage, idx: usize) -> usize {
     i.min(len)
 }
 
+/// True when `line` is short enough to lay out as rows.
+///
+/// A single-line file can be gigabytes; wrapping one would mean copying it to
+/// measure every character, which is precisely the cost the renderer avoids by
+/// painting a window instead. Such a line is one row, and the motions treat it
+/// that way so that they agree with what is on screen.
+fn wrappable(storage: &dyn TextStorage, line: usize) -> bool {
+    storage.line_len(line) <= WHOLE_LINE_LIMIT
+}
+
+/// Height of `line` in visual rows when wrapped at `width`.
+fn wrapped_height(storage: &dyn TextStorage, line: usize, width: usize, tab_width: usize) -> isize {
+    if !wrappable(storage, line) {
+        return 1;
+    }
+    LineLayout::new(&storage.line_slice(line), width, tab_width).height() as isize
+}
+
+/// Move the cursor `delta` visual rows, keeping its column *within the row*.
+///
+/// With wrapping on, the column the user is holding onto is the one they see,
+/// which is measured from the start of the row rather than from the start of
+/// the line: row 2 of a wrapped line starts at a different line column, and
+/// carrying the line column over would make the caret slide sideways on every
+/// wrapped row.
+fn move_visual_rows(
+    storage: &dyn TextStorage,
+    cursor: usize,
+    delta: isize,
+    ctx: MotionCtx,
+    preferred_col: Option<usize>,
+    width: usize,
+) -> (usize, Option<usize>) {
+    let tab_width = ctx.tab_width;
+    let line = storage.line_of_char(cursor);
+    let line_start = storage.line_start(line);
+    let layout = LineLayout::new(&storage.line_slice(line), width, tab_width);
+    let row = layout.row_of(cursor.saturating_sub(line_start));
+    let col = preferred_col.unwrap_or_else(|| {
+        let seg = layout.segments()[row];
+        visual_col_of(storage, line_start, cursor, tab_width).saturating_sub(seg.start_col)
+    });
+
+    let last_line = storage.len_lines().saturating_sub(1);
+    let mut cur_line = line;
+    let mut cur_row = row as isize;
+    let mut height = layout.height() as isize;
+    let mut remaining = delta;
+    while remaining != 0 {
+        let step = if remaining > 0 { 1 } else { -1 };
+        if step > 0 {
+            if cur_row + 1 < height {
+                cur_row += 1;
+            } else if cur_line < last_line {
+                cur_line += 1;
+                cur_row = 0;
+                height = wrapped_height(storage, cur_line, width, tab_width);
+            } else {
+                break;
+            }
+        } else if cur_row > 0 {
+            cur_row -= 1;
+        } else if cur_line > 0 {
+            cur_line -= 1;
+            height = wrapped_height(storage, cur_line, width, tab_width);
+            cur_row = height - 1;
+        } else {
+            break;
+        }
+        remaining -= step;
+    }
+
+    if remaining == delta {
+        // Nothing moved: return the cursor untouched rather than resolving the
+        // remembered column back into a position, which would shift the caret
+        // sideways at the ends of the buffer.
+        return (cursor, Some(col));
+    }
+
+    let text = storage.line_slice(cur_line);
+    let offset = if wrappable(storage, cur_line) {
+        LineLayout::new(&text, width, tab_width).pos_at(cur_row.max(0) as usize, col, tab_width)
+    } else {
+        // One row, so the row column is the line column.
+        char_at_visual_col(&text, col, tab_width).0
+    };
+    (storage.line_start(cur_line) + offset, Some(col))
+}
+
 /// Apply a motion, returning the new cursor position.
 ///
 /// `preferred_col` is the visual column remembered across vertical motions; it
@@ -266,6 +365,12 @@ pub fn apply(
         Motion::DocStart => (0, None),
         Motion::DocEnd => (len, None),
         Motion::Up | Motion::Down => {
+            if let Some(width) = ctx.wrap_width {
+                if wrappable(storage, storage.line_of_char(cursor)) {
+                    let step = if motion == Motion::Up { -1 } else { 1 };
+                    return move_visual_rows(storage, cursor, step, ctx, preferred_col, width);
+                }
+            }
             let line = storage.line_of_char(cursor);
             let line_start = storage.line_start(line);
             let col = preferred_col
@@ -291,6 +396,16 @@ pub fn apply(
         }
         Motion::PageUp | Motion::PageDown => {
             let step = ctx.page.max(1);
+            if let Some(width) = ctx.wrap_width {
+                if wrappable(storage, storage.line_of_char(cursor)) {
+                    let rows = if motion == Motion::PageUp {
+                        -(step as isize)
+                    } else {
+                        step as isize
+                    };
+                    return move_visual_rows(storage, cursor, rows, ctx, preferred_col, width);
+                }
+            }
             let line = storage.line_of_char(cursor);
             let line_start = storage.line_start(line);
             let col = preferred_col
@@ -364,6 +479,7 @@ mod tests {
         let ctx = MotionCtx {
             tab_width: 4,
             page: 10,
+            wrap_width: None,
         };
         let (pos, _) = apply(&doc, 1, Motion::Down, ctx, None);
         assert_eq!(pos, 8, "tab counts as 4 columns, not 1 character");
@@ -389,5 +505,72 @@ mod tests {
         assert_eq!(p, 4);
         let (p, _) = apply(&doc, p, Motion::LineStartSmart, ctx, None);
         assert_eq!(p, 0);
+    }
+
+    // ------------------------------------------------------------ word wrap
+
+    fn wrapped(width: usize, page: usize) -> MotionCtx {
+        MotionCtx {
+            tab_width: 4,
+            page,
+            wrap_width: Some(width),
+        }
+    }
+
+    #[test]
+    fn vertical_motion_steps_through_wrapped_rows() {
+        // Wrapped at nine columns, "aaaa bbbb cccc" is "aaaa bbbb" and "cccc".
+        let doc = s("aaaa bbbb cccc");
+        let ctx = wrapped(9, 10);
+        let (pos, col) = apply(&doc, 0, Motion::Down, ctx, None);
+        assert_eq!(pos, 10, "one row down is the start of the next row");
+        assert_eq!(col, Some(0));
+        let (back, _) = apply(&doc, pos, Motion::Up, ctx, col);
+        assert_eq!(back, 0);
+    }
+
+    #[test]
+    fn vertical_motion_crosses_a_line_break_between_rows() {
+        let doc = s("short\naaaa bbbb");
+        let ctx = wrapped(6, 10);
+        // Character 11 is the space that ends row 0 of the second line.
+        let (pos, col) = apply(&doc, 11, Motion::Up, ctx, None);
+        assert_eq!(pos, 6, "up a row, still on the wrapped line");
+        assert_eq!(col, Some(0));
+        let (pos, _) = apply(&doc, pos, Motion::Up, ctx, col);
+        assert_eq!(pos, 0, "and then onto the previous line");
+    }
+
+    #[test]
+    fn vertical_motion_holds_the_column_within_the_row() {
+        // Row 1 starts at line column 5, so holding the *line* column 2 would
+        // land on the space that ended row 0 instead of on the third character
+        // of the row the user is looking at.
+        let doc = s("aaaa bbbb cccc dddd");
+        let ctx = wrapped(8, 10);
+        let (pos, col) = apply(&doc, 2, Motion::Down, ctx, None);
+        assert_eq!(pos, 7, "row 1, column 2");
+        assert_eq!(col, Some(2));
+    }
+
+    #[test]
+    fn paging_moves_by_visual_rows_not_lines() {
+        // "aaa bbb ccc ddd eee fff" at eight columns is three rows on one line.
+        let doc = s("aaa bbb ccc ddd eee fff");
+        let ctx = wrapped(8, 2);
+        let (pos, _) = apply(&doc, 0, Motion::PageDown, ctx, None);
+        assert_eq!(pos, 16, "two rows down is the third row");
+        let (back, _) = apply(&doc, pos, Motion::PageUp, ctx, Some(0));
+        assert_eq!(back, 0);
+    }
+
+    #[test]
+    fn wrapped_vertical_motion_stops_at_the_buffer_ends() {
+        let doc = s("aaa bbb");
+        let ctx = wrapped(4, 10);
+        let (pos, _) = apply(&doc, 0, Motion::Up, ctx, None);
+        assert_eq!(pos, 0);
+        let (end, _) = apply(&doc, doc.len_chars(), Motion::Down, ctx, None);
+        assert_eq!(end, doc.len_chars());
     }
 }

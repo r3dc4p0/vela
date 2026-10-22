@@ -59,6 +59,8 @@ pub struct EditorSettings {
     pub highlight_cursor_line: bool,
     /// Highlight the matching bracket next to the cursor.
     pub match_brackets: bool,
+    /// Wrap long lines at the window width instead of scrolling sideways.
+    pub word_wrap: bool,
     /// Undo history entry cap.
     pub max_undo_entries: usize,
     /// Undo history memory cap in megabytes.
@@ -83,6 +85,7 @@ impl Default for EditorSettings {
             show_indent_guides: true,
             highlight_cursor_line: true,
             match_brackets: true,
+            word_wrap: false,
             max_undo_entries: 5_000,
             max_undo_mb: 64,
             confirm_unsaved: true,

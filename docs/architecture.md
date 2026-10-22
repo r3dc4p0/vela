@@ -201,9 +201,39 @@ survive a keystroke. The status bar reads the same two numbers back to say where
 the cursor went (`statusbar_away`), since the caret itself is no longer painted.
 
 Both offsets are bounded by the content, not by the screen: `scroll_top` stops
-at the last full page, and `scroll_left` at `Document::content_width`, the width
-of the widest line. That width takes a scan of every line, so it is cached
-against the revision and the tab width — the callers are gestures, never frames.
+at the last full page, and `scroll_left` at `Document::visible_width` — the width
+of the widest line *among the rows on screen*. Measuring the whole buffer
+instead cost eight seconds on an eighteen-million-line file, so the bound is
+deliberately local: it is re-measured every frame, which twenty rows can afford,
+and it never learns about text the user cannot see.
+
+### Word wrap is one function, and everyone calls it
+
+Wrapping looks like a rendering detail and is not: the renderer decides where a
+row ends, the cursor motions have to move by those same rows, and the mouse has
+to map a cell back to a character through the same break points. Three
+implementations would drift, and the symptom — a caret that jumps a character as
+it crosses a row boundary — is miserable to attribute.
+
+So `buffer::wrap::LineLayout` is the only implementation, and it is pure: given
+a line, a width and a tab width it returns segments, each with a character
+offset, a starting column and a width. Segments partition the line, so any
+character has exactly one row, and `row_of`/`pos_at` are inverses. The rules are
+in that module's documentation; the important one is that whitespace which does
+not fit *hangs* past the edge instead of opening the next row with a blank,
+which is what stops a narrow window from producing rows containing one space.
+
+The viewport is stored as `(scroll_top, scroll_row)` — the first visible line and
+the first visible row within it — rather than as a global visual-row index. A
+global index would need the height of every line above it to be useful, which is
+O(lines) per frame; `(line, row)` makes every operation proportional to the rows
+on screen. `Document` stays terminal-agnostic: the wrap width travels in
+`MotionCtx`, the same way `tab_width` and `page` already do, and the mouse
+mapping builds a `LayoutCache` for the one click.
+
+Lines longer than `WHOLE_LINE_LIMIT` are never wrapped, anywhere. Wrapping one
+would mean copying it to measure every character, which is exactly the cost the
+windowed renderer exists to avoid; such a line is one row, and the motions agree.
 
 ### One command system
 
@@ -251,9 +281,10 @@ would dominate the startup budget.
 | Multi-cursor | `tests/multi_cursor.rs`: caret sets, next occurrence, Alt+Click, undo, status bar, painted blocks |
 | Mouse | `tests/mouse.rs`: click, drag and direction, edge autoscroll, multi-click, wheel, tab clicks — coordinates derived from the published layout |
 | Scrolling | `tests/scrolling.rs`: the wheel detaching the view from the cursor, the off-screen indicator and its colour, re-attaching on motion and on typing, page clamping |
+| Word wrap | `tests/word_wrap.rs`: painting across rows, one line number per line, the toggle and its binding, the view following the caret down a tall line, row-based wheel steps, and click/drag through a wrap boundary |
 | Workflows | `tests/workflow.rs`: buffers, search, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
-| Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds, search range validity, save/load round trips |
+| Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |
 | Performance | `benches/core_bench.rs` (Criterion) |
 
 The integration tests use `App::headless`, which never touches the user's profile

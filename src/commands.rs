@@ -95,6 +95,7 @@ pub enum Command {
     ToggleSyntax,
     ToggleHints,
     ToggleCursorLine,
+    ToggleWordWrap,
     WordCount,
     ShowStats,
 
@@ -153,6 +154,7 @@ impl Command {
         Command::ToggleSyntax,
         Command::ToggleHints,
         Command::ToggleCursorLine,
+        Command::ToggleWordWrap,
         Command::WordCount,
         Command::ShowStats,
         Command::Help,
@@ -209,6 +211,7 @@ impl Command {
             Command::ToggleSyntax => "view.toggleSyntax",
             Command::ToggleHints => "view.toggleHints",
             Command::ToggleCursorLine => "view.toggleCursorLine",
+            Command::ToggleWordWrap => "view.toggleWordWrap",
             Command::WordCount => "view.wordCount",
             Command::ShowStats => "view.stats",
             Command::Help => "help.show",
@@ -266,6 +269,7 @@ impl Command {
             Command::ToggleSyntax => "Toggle Syntax Highlighting",
             Command::ToggleHints => "Toggle Shortcut Hints",
             Command::ToggleCursorLine => "Toggle Cursor Line Highlight",
+            Command::ToggleWordWrap => "Toggle Word Wrap",
             Command::WordCount => "Word Count",
             Command::ShowStats => "Document Statistics",
             Command::Help => "Keyboard Shortcuts",
@@ -323,6 +327,7 @@ impl Command {
             | Command::ToggleSyntax
             | Command::ToggleHints
             | Command::ToggleCursorLine
+            | Command::ToggleWordWrap
             | Command::WordCount
             | Command::ShowStats => Category::View,
             Command::Help | Command::CommandPalette => Category::Help,
@@ -373,6 +378,7 @@ impl Command {
             Command::AddCursorToNextOccurrence => &["ctrl+d"],
             Command::ToggleTheme => &["ctrl+shift+t"],
             Command::ToggleWhitespace => &["alt+z"],
+            Command::ToggleWordWrap => &["alt+w"],
             Command::GotoBufferStart => &["ctrl+home"],
             Command::GotoBufferEnd => &["ctrl+end"],
             Command::WordCount => &["ctrl+shift+w"],
@@ -403,6 +409,7 @@ impl Command {
                 | Command::ToggleSyntax
                 | Command::ToggleWhitespace
                 | Command::ToggleCursorLine
+                | Command::ToggleWordWrap
                 | Command::ShowStats
         )
     }
@@ -427,7 +434,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 51);
+        assert_eq!(Command::ALL.len(), 52);
     }
 
     #[test]
