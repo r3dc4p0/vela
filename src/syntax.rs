@@ -645,12 +645,12 @@ fn constant_set(lang: Language) -> Option<&'static HashSet<&'static str>> {
 }
 
 fn starts_with_at(chars: &[char], at: usize, pat: &str) -> bool {
-    let mut i = at;
+    let mut rest = chars.iter().skip(at);
     for c in pat.chars() {
-        if i >= chars.len() || chars[i] != c {
-            return false;
+        match rest.next() {
+            Some(&h) if h == c => {}
+            _ => return false,
         }
-        i += 1;
     }
     true
 }

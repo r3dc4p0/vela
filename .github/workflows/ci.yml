@@ -20,9 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned on purpose. Every Rust release can add clippy lints, and with
+      # `-D warnings` a new lint turns into a red build on a commit that changed
+      # nothing. Bump this deliberately, together with the fixes it requires.
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.99.1
           components: rustfmt, clippy
 
       - name: Cache cargo
