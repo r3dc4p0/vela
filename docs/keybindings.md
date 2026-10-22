@@ -29,6 +29,10 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Ctrl+X` / `Ctrl+C` / `Ctrl+V` | `edit.cut` / `edit.copy` / `edit.paste` | Clipboard (line-wise when nothing is selected) |
 | `Ctrl+Shift+C` | `edit.copy` | Copy, for terminals that turn `Ctrl+C` into `SIGINT` |
 | `Ctrl+A` | `edit.selectAll` | Select the whole document |
+| `Ctrl+D` | `edit.addCursorToNext` | Add a cursor at the next occurrence of the selection (the first press selects the word under the cursor) |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | `edit.addCursorAbove` / `edit.addCursorBelow` | Add a cursor on the line above / below, keeping the column |
+| `Alt+Click` | — | Add a cursor, or remove the one already there |
+| `Esc` | — | Collapse every cursor back to one |
 | `Ctrl+/` | `edit.toggleComment` | Toggle line comments for the file's language |
 | `Ctrl+Shift+D` | `edit.duplicateLine` | Duplicate the current line or selection |
 | `Ctrl+Shift+K` | `edit.deleteLine` | Delete the current line or selection |
@@ -92,6 +96,11 @@ around this where it can and tells you where it cannot.
    `stty -ixon` or use the command palette.
 5. **`Shift+Tab`** is sent as `BackTab` by some terminals and as `Tab`+`Shift` by
    others; both are handled.
+6. **`Ctrl+Alt+Up`/`Ctrl+Alt+Down`** need a terminal that reports the Alt
+   modifier with arrow keys. Without the enhanced protocol some terminals send a
+   plain arrow, which moves the cursor instead of adding one; `Alt+Click` and
+   `Ctrl+D` are the fallbacks. Rebind them with `"ctrl+alt+up"` if you prefer a
+   different chord.
 
 The status bar shows `~keys` when Vela is running *without* the enhanced keyboard
 protocol, so you can tell at a glance which set of caveats applies.

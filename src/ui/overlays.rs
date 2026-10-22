@@ -528,6 +528,11 @@ pub fn help_lines(app: &App) -> Vec<String> {
     out.push("    Shift+Arrows           Select".to_string());
     out.push("    Ctrl+Home / Ctrl+End   Buffer start / end".to_string());
     out.push(String::new());
+    out.push("  Multi-cursor".to_string());
+    out.push("    Alt+Click              Add or remove a cursor".to_string());
+    out.push("    Esc                    Collapse back to one cursor".to_string());
+    out.push("    Typing, Enter, Delete  Apply to every cursor at once".to_string());
+    out.push(String::new());
     out.push("  Search bar".to_string());
     out.push("    Enter                  Next match".to_string());
     out.push("    Shift+Enter            Previous match".to_string());

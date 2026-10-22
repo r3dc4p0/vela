@@ -12,6 +12,8 @@
 
 use std::time::{Duration, Instant};
 
+use super::Caret;
+
 /// One contiguous replacement: `removed` at `start` became `inserted`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Change {
@@ -47,6 +49,10 @@ pub struct Transaction {
     pub anchor_before: Option<usize>,
     pub cursor_after: usize,
     pub anchor_after: Option<usize>,
+    /// Secondary carets before and after the edit, so undo restores a
+    /// multi-cursor session instead of collapsing it to one caret.
+    pub extra_before: Vec<Caret>,
+    pub extra_after: Vec<Caret>,
     pub kind: TxKind,
     pub time: Instant,
 }
@@ -223,6 +229,11 @@ fn try_merge(prev: &Transaction, next: &Transaction) -> Option<Transaction> {
     if prev.anchor_after.is_some() || next.anchor_before.is_some() {
         return None;
     }
+    // Multi-cursor runs are never coalesced: every keystroke carries its own
+    // caret set, and a wrong merge would leave carets in the wrong place.
+    if !prev.extra_after.is_empty() || !next.extra_before.is_empty() {
+        return None;
+    }
     if prev.changes.len() != 1 || next.changes.len() != 1 {
         return None;
     }
@@ -292,6 +303,8 @@ fn try_merge(prev: &Transaction, next: &Transaction) -> Option<Transaction> {
         anchor_before: prev.anchor_before,
         cursor_after: next.cursor_after,
         anchor_after: next.anchor_after,
+        extra_before: prev.extra_before.clone(),
+        extra_after: next.extra_after.clone(),
         kind: prev.kind,
         time: next.time,
     })
@@ -312,6 +325,8 @@ mod tests {
             anchor_before: None,
             cursor_after: start + text.chars().count(),
             anchor_after: None,
+            extra_before: Vec::new(),
+            extra_after: Vec::new(),
             kind,
             time: Instant::now(),
         }

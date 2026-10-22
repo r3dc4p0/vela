@@ -68,6 +68,10 @@ pub enum Command {
     Indent,
     Dedent,
     TrimTrailingWhitespace,
+    AddCursorAbove,
+    AddCursorBelow,
+    AddCursorToNextOccurrence,
+    CollapseCursors,
 
     // Navigate
     GotoLine,
@@ -128,6 +132,10 @@ impl Command {
         Command::Indent,
         Command::Dedent,
         Command::TrimTrailingWhitespace,
+        Command::AddCursorAbove,
+        Command::AddCursorBelow,
+        Command::AddCursorToNextOccurrence,
+        Command::CollapseCursors,
         Command::GotoLine,
         Command::GotoBufferStart,
         Command::GotoBufferEnd,
@@ -180,6 +188,10 @@ impl Command {
             Command::Indent => "edit.indent",
             Command::Dedent => "edit.dedent",
             Command::TrimTrailingWhitespace => "edit.trimTrailingWhitespace",
+            Command::AddCursorAbove => "edit.addCursorAbove",
+            Command::AddCursorBelow => "edit.addCursorBelow",
+            Command::AddCursorToNextOccurrence => "edit.addCursorToNext",
+            Command::CollapseCursors => "edit.collapseCursors",
             Command::GotoLine => "nav.gotoLine",
             Command::GotoBufferStart => "nav.bufferStart",
             Command::GotoBufferEnd => "nav.bufferEnd",
@@ -233,6 +245,10 @@ impl Command {
             Command::Indent => "Indent",
             Command::Dedent => "Outdent",
             Command::TrimTrailingWhitespace => "Trim Trailing Whitespace",
+            Command::AddCursorAbove => "Add Cursor Above",
+            Command::AddCursorBelow => "Add Cursor Below",
+            Command::AddCursorToNextOccurrence => "Add Cursor at Next Occurrence",
+            Command::CollapseCursors => "Collapse to One Cursor",
             Command::GotoLine => "Go to Line…",
             Command::GotoBufferStart => "Go to Start of Buffer",
             Command::GotoBufferEnd => "Go to End of Buffer",
@@ -285,7 +301,11 @@ impl Command {
             | Command::ToggleComment
             | Command::Indent
             | Command::Dedent
-            | Command::TrimTrailingWhitespace => Category::Edit,
+            | Command::TrimTrailingWhitespace
+            | Command::AddCursorAbove
+            | Command::AddCursorBelow
+            | Command::AddCursorToNextOccurrence
+            | Command::CollapseCursors => Category::Edit,
             Command::GotoLine | Command::GotoBufferStart | Command::GotoBufferEnd => {
                 Category::Navigate
             }
@@ -348,6 +368,9 @@ impl Command {
             Command::MoveLineUp => &["alt+up"],
             Command::MoveLineDown => &["alt+down"],
             Command::ToggleComment => &["ctrl+/"],
+            Command::AddCursorAbove => &["ctrl+alt+up"],
+            Command::AddCursorBelow => &["ctrl+alt+down"],
+            Command::AddCursorToNextOccurrence => &["ctrl+d"],
             Command::ToggleTheme => &["ctrl+shift+t"],
             Command::ToggleWhitespace => &["alt+z"],
             Command::GotoBufferStart => &["ctrl+home"],
@@ -404,7 +427,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 47);
+        assert_eq!(Command::ALL.len(), 51);
     }
 
     #[test]

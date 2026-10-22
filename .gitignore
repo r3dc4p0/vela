@@ -1,1 +1,5 @@
 /target
+
+# Local scratch files, not part of the project.
+/test.txt
+/site/

@@ -18,11 +18,11 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::layout::Rect;
 use tracing::{debug, error as log_error, info};
 
-use crate::buffer::{Document, Motion, MotionCtx};
+use crate::buffer::{Caret, Document, Motion, MotionCtx};
 use crate::clipboard::Clipboard;
 use crate::commands::Command;
 use crate::config::Config;
@@ -410,6 +410,11 @@ impl App {
             MouseEventKind::ScrollUp => self.scroll_by(-3),
             MouseEventKind::ScrollDown => self.scroll_by(3),
             MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                // Alt+Click extends the caret set instead of moving the cursor.
+                if mouse.modifiers.contains(KeyModifiers::ALT) {
+                    self.alt_click_at(mouse.column, mouse.row);
+                    return;
+                }
                 let now = Instant::now();
                 let is_double = self
                     .last_click
@@ -426,61 +431,77 @@ impl App {
         }
     }
 
-    /// Map a screen position to a buffer position and move the cursor there.
-    fn click_at(&mut self, column: u16, row: u16, select_word: bool) {
+    /// Map a screen position inside the editor to a buffer character index.
+    fn buffer_position_at(&self, column: u16, row: u16) -> Option<usize> {
         let area = self.last_editor_area;
         if area.width == 0 || area.height == 0 {
-            return;
+            return None;
         }
         if row < area.y || row >= area.y + area.height {
-            return;
+            return None;
         }
-        let Some(idx) = self.active_index() else {
-            return;
-        };
+        let doc = &self.buffers[self.active_index()?];
         let cfg = &self.config;
-        let digits = crate::ui::editor::decimal_digits(self.buffers[idx].line_count()).max(3);
+        let digits = crate::ui::editor::decimal_digits(doc.line_count()).max(3);
         let gutter = if cfg.editor.line_numbers {
             (digits + 1) as u16
         } else {
             0
         };
         if column < area.x + gutter {
-            return;
+            return None;
         }
         let rel_row = (row - area.y) as usize;
-        let line = self.buffers[idx].scroll_top() + rel_row;
-        if line >= self.buffers[idx].line_count() {
-            return;
+        let line = doc.scroll_top() + rel_row;
+        if line >= doc.line_count() {
+            return None;
         }
-        let target_col = (column - area.x - gutter) as usize + self.buffers[idx].scroll_left();
-        let tab_width = cfg.tab_width();
-        let doc = &mut self.buffers[idx];
+        let target_col = (column - area.x - gutter) as usize + doc.scroll_left();
         let line_start = doc.storage().line_start(line);
         let text = doc.line_text(line);
-        let (offset, _) = crate::buffer::motion::char_at_visual_col(&text, target_col, tab_width);
-        doc.set_cursor(line_start + offset);
+        let (offset, _) =
+            crate::buffer::motion::char_at_visual_col(&text, target_col, cfg.tab_width());
+        Some(line_start + offset)
+    }
 
+    /// Map a screen position to a buffer position and move the cursor there.
+    fn click_at(&mut self, column: u16, row: u16, select_word: bool) {
+        let Some(pos) = self.buffer_position_at(column, row) else {
+            return;
+        };
+        let Some(idx) = self.active_index() else {
+            return;
+        };
+        let doc = &mut self.buffers[idx];
+        doc.set_cursor(pos);
         if select_word {
-            let word = doc.word_at_cursor();
-            if !word.is_empty() {
-                let cursor = doc.cursor();
-                let line_start = doc.storage().line_start(line);
-                let text = doc.line_text(line);
-                let chars: Vec<char> = text.chars().collect();
-                let col = cursor - line_start;
-                let is_word = |c: char| c.is_alphanumeric() || c == '_';
-                let mut lo = col;
-                while lo > 0 && is_word(chars[lo - 1]) {
-                    lo -= 1;
-                }
-                let mut hi = col;
-                while hi < chars.len() && is_word(chars[hi]) {
-                    hi += 1;
-                }
-                doc.select_range(line_start + lo..line_start + hi);
-            }
+            editing::select_word_at_cursor(doc);
         }
+    }
+
+    /// Alt+Click: add a caret at the clicked position, or remove the secondary
+    /// caret already sitting there.
+    fn alt_click_at(&mut self, column: u16, row: u16) {
+        let Some(pos) = self.buffer_position_at(column, row) else {
+            return;
+        };
+        let Some(idx) = self.active_index() else {
+            return;
+        };
+        let doc = &mut self.buffers[idx];
+        // Clicking the primary caret must not delete the only caret.
+        if doc.cursor() == pos {
+            return;
+        }
+        if doc.remove_caret_at(pos) {
+            return;
+        }
+        if !doc.add_caret(Caret::at(pos)) {
+            self.info("A caret already covers that position");
+            return;
+        }
+        let count = doc.caret_count();
+        self.info(format!("{count} cursors"));
     }
 
     fn scroll_by(&mut self, delta: isize) {
@@ -502,7 +523,7 @@ impl App {
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        doc.insert_text(text);
+        editing::insert_at_carets(doc, text);
         self.after_edit();
     }
 
@@ -511,11 +532,7 @@ impl App {
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        if auto {
-            doc.insert_newline();
-        } else {
-            doc.insert_text("\n");
-        }
+        editing::newline_at_carets(doc, auto);
         self.after_edit();
     }
 
@@ -524,7 +541,11 @@ impl App {
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        if doc.has_selection() {
+        if doc.has_multiple_carets() {
+            // Every caret gets its own indent unit; a selection on any caret is
+            // replaced like any other insertion.
+            editing::insert_at_carets(doc, &unit);
+        } else if doc.has_selection() {
             editing::indent(doc, &unit);
         } else {
             doc.insert_text(&unit);
@@ -545,7 +566,7 @@ impl App {
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        doc.backspace();
+        editing::backspace_at_carets(doc);
         self.after_edit();
     }
 
@@ -553,7 +574,7 @@ impl App {
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        doc.delete_forward();
+        editing::delete_forward_at_carets(doc);
         self.after_edit();
     }
 
@@ -567,6 +588,12 @@ impl App {
     }
 
     fn escape(&mut self) {
+        if let Some(doc) = self.active_doc_mut() {
+            if doc.has_multiple_carets() {
+                doc.collapse_carets();
+                return;
+            }
+        }
         if self.search.active {
             self.search.clear();
             self.info("search cleared");
@@ -589,10 +616,17 @@ impl App {
         let doc = &self.buffers[idx];
         let id = doc.id();
         let revision = doc.revision();
-        let cursor_line = doc.cursor_line_col().0;
+        // A multi-cursor edit touches several lines; invalidate from the
+        // highest one so no stale lexer state survives.
+        let first_line = doc
+            .carets()
+            .iter()
+            .map(|c| doc.storage().line_of_char(c.span().start))
+            .min()
+            .unwrap_or(0);
 
         if let Some(cache) = self.syntax_cache.get_mut(&id) {
-            cache.invalidate_from(cursor_line);
+            cache.invalidate_from(first_line);
         }
         self.brackets_cache = None;
 
@@ -663,6 +697,10 @@ impl App {
                     self.info("No trailing whitespace");
                 }
             }
+            Command::AddCursorAbove => self.add_cursor_vertical(true),
+            Command::AddCursorBelow => self.add_cursor_vertical(false),
+            Command::AddCursorToNextOccurrence => self.add_cursor_next_occurrence(),
+            Command::CollapseCursors => self.collapse_cursors(),
 
             Command::GotoLine => self.goto_prompt(),
             Command::GotoBufferStart => self.move_cursor(Motion::DocStart, false),
@@ -756,6 +794,57 @@ impl App {
         }
     }
 
+    // ---------------------------------------------------------- multi-cursor
+
+    /// Add a caret on the line above (`up`) or below the outermost caret.
+    fn add_cursor_vertical(&mut self, up: bool) {
+        let tab_width = self.config.tab_width();
+        let Some(doc) = self.active_doc_mut() else {
+            return;
+        };
+        let added = editing::add_cursor_vertical(doc, !up, tab_width);
+        let count = doc.caret_count();
+        if added {
+            self.info(format!("{count} cursors"));
+        } else {
+            self.info(if up {
+                "No line above to add a cursor on"
+            } else {
+                "No line below to add a cursor on"
+            });
+        }
+    }
+
+    fn add_cursor_next_occurrence(&mut self) {
+        let Some(doc) = self.active_doc_mut() else {
+            return;
+        };
+        let outcome = editing::add_cursor_to_next_occurrence(doc);
+        match outcome {
+            editing::Occurrence::Added(n) => self.success(format!("{n} cursors")),
+            editing::Occurrence::Exhausted => self.info("No further occurrence"),
+            editing::Occurrence::NoWord => {
+                self.info("Put the cursor on a word, or select the text to match")
+            }
+            editing::Occurrence::Limit => self.warn(format!(
+                "Cursor limit reached ({}); press Esc to collapse",
+                editing::MAX_CARETS
+            )),
+        }
+    }
+
+    fn collapse_cursors(&mut self) {
+        let Some(doc) = self.active_doc_mut() else {
+            return;
+        };
+        if doc.has_multiple_carets() {
+            doc.collapse_carets();
+            self.info("Collapsed to one cursor");
+        } else {
+            self.info("Already a single cursor");
+        }
+    }
+
     fn redo(&mut self) {
         let Some(doc) = self.active_doc_mut() else {
             return;
@@ -771,13 +860,7 @@ impl App {
         let Some(doc) = self.active_doc() else {
             return;
         };
-        let text = if doc.has_selection() {
-            doc.selected_text()
-        } else {
-            // Ctrl+C with no selection copies the current line, like VS Code.
-            let line = doc.cursor_line_col().0;
-            format!("{}\n", doc.line_text(line))
-        };
+        let text = editing::clipboard_text(doc);
         if text.is_empty() {
             self.info("Nothing to copy");
             return;
@@ -796,7 +879,8 @@ impl App {
         let Some(doc) = self.active_doc() else {
             return;
         };
-        if !doc.has_selection() {
+        let multiple = doc.has_multiple_carets();
+        if !multiple && !doc.has_selection() {
             // Cut the current line.
             let line = doc.cursor_line_col().0;
             let text = format!("{}\n", doc.line_text(line));
@@ -805,18 +889,17 @@ impl App {
             self.success("Cut line");
             return;
         }
-        let text = doc.selected_text();
+        let text = editing::clipboard_text(doc);
+        if text.is_empty() {
+            self.info("Nothing to cut");
+            return;
+        }
         let chars = text.chars().count();
         self.clipboard.set(&text);
-        self.with_doc(|d| {
-            if let Some(sel) = d.selection() {
-                d.delete_range(sel);
-                true
-            } else {
-                false
-            }
-        });
-        self.success(format!("Cut {chars} characters"));
+        let changed = self.with_doc(editing::cut_at_carets);
+        if changed {
+            self.success(format!("Cut {chars} characters"));
+        }
     }
 
     fn paste(&mut self) {

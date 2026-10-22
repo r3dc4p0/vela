@@ -201,7 +201,11 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
     } else {
         ((line as f32 / total as f32) * 100.0).round() as usize
     };
-    let mut right = format!("Ln {line}, Col {col}   {pct}%   ");
+    let mut right = String::new();
+    if doc.caret_count() > 1 {
+        right.push_str(&format!("{} cursors   ", doc.caret_count()));
+    }
+    right.push_str(&format!("Ln {line}, Col {col}   {pct}%   "));
     if app.search.active && !app.search.query.is_empty() {
         right = format!("{}   {right}", app.search.matches.counter());
     }

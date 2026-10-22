@@ -29,7 +29,7 @@ ever point one way.
 | --- | --- |
 | `main` | Argument parsing, logging, terminal lifecycle, signal handlers |
 | `app` | Application state, the event loop, command dispatch, file operations, overlays |
-| `buffer` | `Document`: text storage, cursor, selection, undo, motions |
+| `buffer` | `Document`: text storage, cursors, selection, undo, motions |
 | `buffer::storage` | `TextStorage` trait and the rope implementation |
 | `buffer::scan` | Streaming literal search over the rope |
 | `buffer::motion` | Grapheme- and display-width-aware cursor motions |
@@ -97,8 +97,30 @@ whitespace" are a single undo step even though they touch many places: edits are
 applied from the highest offset downwards (so every range stays valid in the
 pre-edit coordinate system) and recorded as one transaction.
 
+`apply_caret_edits` is the multi-cursor variant: one edit per caret, the same
+bottom-up application, and one transaction. Each caret is placed after its own
+inserted text by accumulating the offset delta of every edit below it, which is
+also what makes a batch delete leave every caret at its own deletion point. The
+transaction records the secondary carets before and after the edit, so undo
+brings the whole caret set back rather than collapsing to one.
+
 Dirty state is `saved_index != index` in the history, not a boolean, which is why
 undoing back to the save point clears the modified marker.
+
+### Multi-cursor model
+
+A `Document` stores one primary caret as `cursor` + `anchor` (every existing
+path — status bar, search, scroll, mouse — reads it) and any number of secondary
+carets in `extra: Vec<Caret>`. The vector is kept sorted, deduplicated and
+non-overlapping with the primary by `normalise_carets`; overlapping selections
+are *rejected* rather than merged, because two carets whose selections intersect
+cannot be expressed as one non-overlapping edit batch.
+
+Single-caret editing keeps its original code path, including undo coalescing.
+Only when `caret_count() > 1` does editing route through `apply_caret_edits`.
+Commands that shift offsets in a way they cannot map back — line duplicate,
+line delete, batch indent, `apply_batch` in general — clear the secondary carets
+instead of leaving stale positions behind.
 
 ### Atomic saving
 
@@ -167,6 +189,7 @@ would dominate the startup budget.
 | --- | --- |
 | Storage, motions, undo, search, filesystem | Unit tests in each module, including EOL/encoding/BOM/permission edge cases |
 | Editing commands | `tests/editing_core.rs` drives the real `App` through real key events |
+| Multi-cursor | `tests/multi_cursor.rs`: caret sets, next occurrence, Alt+Click, undo, status bar, painted blocks |
 | Workflows | `tests/workflow.rs`: buffers, search, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds, search range validity, save/load round trips |

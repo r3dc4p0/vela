@@ -31,6 +31,11 @@ cut/copy/paste; undo/redo with coalescing and save-point tracking; duplicate,
 delete and move lines; indent/dedent; comment toggling; auto-indent; bracket
 matching; trailing-whitespace trimming; optional final newline.
 
+**Multi-cursor** — stack carets with `Ctrl+Alt+Up`/`Ctrl+Alt+Down`, add one per
+occurrence of the selection with `Ctrl+D`, or place them with `Alt+Click`.
+Typing, deleting, indenting and newlines apply to every caret as a single undo
+step, and `Esc` collapses back to one.
+
 **Files** — multiple buffers with tabs; atomic saves (temp file + `fsync` +
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM
 detection; LF/CRLF/CR line endings detected per file and written back unchanged;
@@ -97,6 +102,9 @@ The essentials:
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+X` / `Ctrl+C` / `Ctrl+V` | Cut / Copy / Paste |
 | `Ctrl+A` | Select all |
+| `Ctrl+D` | Add a cursor at the next occurrence |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Add a cursor above / below |
+| `Alt+Click` | Add or remove a cursor |
 | `Ctrl+G` | Go to line |
 | `Ctrl+Tab` | Next buffer |
 | `F1` | Help |
@@ -183,7 +191,10 @@ for how to add commands, key bindings, UI components and buffer backends.
 Vela is a working editor, not a finished product. Known limitations are listed
 in [docs/roadmap.md](docs/roadmap.md); the important ones:
 
-- No split views or multi-cursor editing yet.
+- No split views yet.
+- Line-oriented commands (duplicate/delete/move line, comment toggle, indent,
+  trim whitespace) act on the primary cursor and collapse the others; typing,
+  deleting and newlines do apply to every cursor.
 - Syntax highlighting is a fast line-oriented lexer, not a full parser: it can
   mis-colour unusual constructs (raw strings, nested comments) but never affects
   the text itself.

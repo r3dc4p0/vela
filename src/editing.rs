@@ -7,7 +7,8 @@
 
 use std::ops::Range;
 
-use crate::buffer::{Document, Edit};
+use crate::buffer::motion::{char_at_visual_col, visual_col_of};
+use crate::buffer::{Caret, CaretEdit, Document, Edit, TxKind};
 use crate::syntax::Language;
 
 /// Line comment marker for a language, if it has one.
@@ -429,6 +430,358 @@ pub fn insert_on_each_line(doc: &mut Document, text: &str) -> bool {
     doc.apply_batch(edits, cursor)
 }
 
+// ---------------------------------------------------------------------------
+// Multi-cursor
+// ---------------------------------------------------------------------------
+
+/// Upper bound on simultaneous carets. Editing cost grows linearly with the
+/// caret count, and past this point the feature stops being useful.
+pub const MAX_CARETS: usize = 256;
+
+/// Occurrences scanned when looking for the next match of a selection. The
+/// search bar uses the same budget, so "select next occurrence" is never slower
+/// than an incremental search.
+const OCCURRENCE_SCAN_LIMIT: usize = 20_000;
+
+/// Outcome of "add a cursor at the next occurrence".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Occurrence {
+    /// A caret was added; carries the total number of carets now active.
+    Added(usize),
+    /// Every remaining occurrence already has a caret.
+    Exhausted,
+    /// Nothing to search for: no selection and no word under the cursor.
+    NoWord,
+    /// [`MAX_CARETS`] reached.
+    Limit,
+}
+
+/// Insert `text` at every caret, replacing each caret's selection.
+pub fn insert_at_carets(doc: &mut Document, text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    if !doc.has_multiple_carets() {
+        doc.insert_text(text);
+        return true;
+    }
+    let kind = if text.contains('\n') {
+        TxKind::Other
+    } else {
+        TxKind::Insert
+    };
+    let primary = doc.primary_caret();
+    let edits: Vec<CaretEdit> = doc
+        .carets()
+        .into_iter()
+        .map(|caret| {
+            let range = caret.selection().unwrap_or(caret.pos..caret.pos);
+            CaretEdit::new(range, text, caret == primary)
+        })
+        .collect();
+    doc.apply_caret_edits(edits, kind)
+}
+
+/// Insert a line break at every caret, honouring auto-indent.
+pub fn newline_at_carets(doc: &mut Document, auto_indent: bool) -> bool {
+    if !doc.has_multiple_carets() {
+        if auto_indent {
+            doc.insert_newline();
+        } else {
+            doc.insert_text("\n");
+        }
+        return true;
+    }
+    let primary = doc.primary_caret();
+    let edits: Vec<CaretEdit> = doc
+        .carets()
+        .into_iter()
+        .map(|caret| {
+            let range = caret.selection().unwrap_or(caret.pos..caret.pos);
+            let text = if auto_indent {
+                newline_text(doc, range.start)
+            } else {
+                "\n".to_string()
+            };
+            CaretEdit::new(range, text, caret == primary)
+        })
+        .collect();
+    doc.apply_caret_edits(edits, TxKind::Other)
+}
+
+/// The text a newline should insert when the caret sits at `at`: a line break
+/// plus the indentation of the line being split.
+fn newline_text(doc: &Document, at: usize) -> String {
+    let line = doc.storage().line_of_char(at);
+    let start = doc.storage().line_start(line);
+    let before = doc.storage().slice_chars(start, at);
+    if before.trim().is_empty() {
+        // Inside the indentation (or on an empty line): duplicating it would be
+        // surprising, so insert a bare line break.
+        return "\n".to_string();
+    }
+    let indent: String = before
+        .chars()
+        .take_while(|c| *c == ' ' || *c == '\t')
+        .collect();
+    format!("\n{indent}")
+}
+
+/// Delete one grapheme (or the selection) before every caret.
+pub fn backspace_at_carets(doc: &mut Document) -> bool {
+    if !doc.has_multiple_carets() {
+        doc.backspace();
+        return true;
+    }
+    let primary = doc.primary_caret();
+    let edits: Vec<CaretEdit> = doc
+        .carets()
+        .into_iter()
+        .map(|caret| {
+            let range = match caret.selection() {
+                Some(sel) => sel,
+                None if caret.pos > 0 => {
+                    crate::buffer::motion::prev_grapheme(doc.storage(), caret.pos)..caret.pos
+                }
+                // Nothing to delete at the start of the buffer; the empty edit
+                // keeps the caret counted and in place.
+                None => caret.pos..caret.pos,
+            };
+            CaretEdit::delete(range, caret == primary)
+        })
+        .collect();
+    doc.apply_caret_edits(edits, TxKind::Other)
+}
+
+/// Delete one grapheme (or the selection) after every caret.
+pub fn delete_forward_at_carets(doc: &mut Document) -> bool {
+    if !doc.has_multiple_carets() {
+        doc.delete_forward();
+        return true;
+    }
+    let primary = doc.primary_caret();
+    let len = doc.len_chars();
+    let edits: Vec<CaretEdit> = doc
+        .carets()
+        .into_iter()
+        .map(|caret| {
+            let range = match caret.selection() {
+                Some(sel) => sel,
+                None if caret.pos < len => {
+                    caret.pos..crate::buffer::motion::next_grapheme(doc.storage(), caret.pos)
+                }
+                None => caret.pos..caret.pos,
+            };
+            CaretEdit::delete(range, caret == primary)
+        })
+        .collect();
+    doc.apply_caret_edits(edits, TxKind::Other)
+}
+
+/// Add a caret one line below (`down`) or above the outermost caret, keeping
+/// its visual column. A caret with a selection gets the same selection shifted
+/// by one line, which is what makes column editing feel continuous.
+pub fn add_cursor_vertical(doc: &mut Document, down: bool, tab_width: usize) -> bool {
+    let carets = doc.carets();
+    let Some(outer) = (if down { carets.last() } else { carets.first() }).copied() else {
+        return false;
+    };
+    let storage = doc.storage();
+    let line = storage.line_of_char(outer.pos);
+    let target = if down {
+        if line + 1 >= doc.line_count() {
+            return false;
+        }
+        line + 1
+    } else {
+        if line == 0 {
+            return false;
+        }
+        line - 1
+    };
+
+    let col = visual_col_of(storage, storage.line_start(line), outer.pos, tab_width);
+    let new_pos = position_on_line(doc, target, col, tab_width);
+
+    let new_anchor = outer.anchor.and_then(|anchor| {
+        let anchor_line = storage.line_of_char(anchor);
+        let anchor_target = if down {
+            anchor_line + 1
+        } else {
+            anchor_line.checked_sub(1)?
+        };
+        if anchor_target >= doc.line_count() {
+            return None;
+        }
+        let anchor_col = visual_col_of(storage, storage.line_start(anchor_line), anchor, tab_width);
+        Some(position_on_line(doc, anchor_target, anchor_col, tab_width))
+    });
+
+    // A selection that could not be shifted line for line becomes a collapsed
+    // caret rather than a partially mapped one.
+    let caret = if outer.anchor.is_some() && new_anchor.is_none() {
+        Caret::at(new_pos)
+    } else {
+        Caret {
+            pos: new_pos,
+            anchor: new_anchor,
+        }
+    };
+    doc.add_caret(caret)
+}
+
+/// Character index at visual column `col` on `line`.
+fn position_on_line(doc: &Document, line: usize, col: usize, tab_width: usize) -> usize {
+    let storage = doc.storage();
+    let start = storage.line_start(line);
+    let (offset, _) = char_at_visual_col(&storage.line_slice(line), col, tab_width);
+    start + offset
+}
+
+/// Add a caret at the next occurrence of the current selection (or of the word
+/// under the primary caret).
+///
+/// The first press selects the word under the cursor and adds the next
+/// occurrence, matching how "select next occurrence" behaves in mainstream
+/// editors: one key, one more caret, repeatable.
+pub fn add_cursor_to_next_occurrence(doc: &mut Document) -> Occurrence {
+    if doc.caret_count() >= MAX_CARETS {
+        return Occurrence::Limit;
+    }
+
+    let needle = match doc.selection() {
+        Some(sel) => doc.storage().slice_chars(sel.start, sel.end),
+        None => {
+            let word = doc.word_at_cursor();
+            if word.is_empty() {
+                return Occurrence::NoWord;
+            }
+            select_word_at_cursor(doc);
+            word
+        }
+    };
+    if needle.is_empty() || needle.contains('\n') {
+        return Occurrence::NoWord;
+    }
+
+    let from = doc.max_caret_end();
+    let len = needle.chars().count();
+    let starts = doc
+        .storage()
+        .find_literal(&needle, true, OCCURRENCE_SCAN_LIMIT);
+    let whole_word = needle.chars().all(|c| c.is_alphanumeric() || c == '_');
+
+    let found = starts.into_iter().find(|&start| {
+        start >= from
+            && (!whole_word || is_whole_word(doc, start, len))
+            && doc.caret_at(start).is_none()
+    });
+    let Some(start) = found else {
+        return Occurrence::Exhausted;
+    };
+
+    let caret = Caret::selecting(start + len, start);
+    if doc.add_caret(caret) {
+        Occurrence::Added(doc.caret_count())
+    } else {
+        Occurrence::Exhausted
+    }
+}
+
+/// Select the word under the primary caret. No-op when the caret is not on a
+/// word character.
+pub fn select_word_at_cursor(doc: &mut Document) {
+    let storage = doc.storage();
+    let line = storage.line_of_char(doc.cursor());
+    let start = storage.line_start(line);
+    let text = storage.line_slice(line);
+    let chars: Vec<char> = text.chars().collect();
+    let col = doc.cursor().saturating_sub(start);
+    if col >= chars.len() {
+        return;
+    }
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut lo = col;
+    while lo > 0 && is_word(chars[lo - 1]) {
+        lo -= 1;
+    }
+    let mut hi = col;
+    while hi < chars.len() && is_word(chars[hi]) {
+        hi += 1;
+    }
+    if lo == hi {
+        return;
+    }
+    // Not `select_range`: that would drop the cursors already stacked.
+    doc.set_primary_selection(start + lo..start + hi);
+}
+
+/// True when `start..start+len` is bounded by non-word characters.
+fn is_whole_word(doc: &Document, start: usize, len: usize) -> bool {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let before_ok = match start.checked_sub(1).and_then(|i| doc.storage().char_at(i)) {
+        Some(c) => !is_word(c),
+        None => true,
+    };
+    let after_ok = match doc.storage().char_at(start + len) {
+        Some(c) => !is_word(c),
+        None => true,
+    };
+    before_ok && after_ok
+}
+
+/// Clipboard payload for the current caret set.
+///
+/// With one caret this keeps the familiar behaviour: the selection, or the
+/// current line when nothing is selected. With several carets only real
+/// selections are collected, one per line, so the copied text matches exactly
+/// what [`cut_at_carets`] would remove.
+pub fn clipboard_text(doc: &Document) -> String {
+    if !doc.has_multiple_carets() {
+        return match doc.selection() {
+            Some(_) => doc.selected_text(),
+            None => {
+                let line = doc.cursor_line_col().0;
+                format!("{}\n", doc.line_text(line))
+            }
+        };
+    }
+    doc.selections()
+        .into_iter()
+        .map(|sel| doc.storage().slice_chars(sel.start, sel.end))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Delete every caret's selection in one transaction.
+///
+/// Collapsed carets are left alone: deleting their line would overlap with a
+/// neighbouring caret on the same line, and a half-applied block delete is
+/// worse than a no-op.
+pub fn cut_at_carets(doc: &mut Document) -> bool {
+    if !doc.has_multiple_carets() {
+        let Some(sel) = doc.selection() else {
+            return false;
+        };
+        doc.delete_range(sel);
+        return true;
+    }
+    let primary = doc.primary_caret();
+    let edits: Vec<CaretEdit> = doc
+        .carets()
+        .into_iter()
+        .filter_map(|caret| {
+            caret
+                .selection()
+                .map(|sel| CaretEdit::delete(sel, caret == primary))
+        })
+        .collect();
+    if edits.is_empty() {
+        return false;
+    }
+    doc.apply_caret_edits(edits, TxKind::Other)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,5 +918,162 @@ mod tests {
         assert_eq!(d.text(), "x\nx\ny");
         assert!(d.undo());
         assert_eq!(d.text(), "x\ny");
+    }
+
+    // ------------------------------------------------------------ multi-cursor
+
+    fn with_carets(text: &str, positions: &[usize]) -> Document {
+        let mut d = Document::from_text(text, None);
+        d.set_cursor(positions[0]);
+        for &p in &positions[1..] {
+            assert!(d.add_caret(Caret::at(p)), "caret {p} rejected");
+        }
+        d
+    }
+
+    fn caret_positions(d: &Document) -> Vec<usize> {
+        d.carets().iter().map(|c| c.pos).collect()
+    }
+
+    #[test]
+    fn typing_reaches_every_caret() {
+        let mut d = with_carets("aaa\nbbb\nccc", &[0, 4, 8]);
+        assert!(insert_at_carets(&mut d, "X"));
+        assert_eq!(d.text(), "Xaaa\nXbbb\nXccc");
+        assert_eq!(d.caret_count(), 3);
+        assert_eq!(caret_positions(&d), vec![1, 6, 11]);
+    }
+
+    #[test]
+    fn typing_replaces_every_selection() {
+        let mut d = Document::from_text("foo bar foo", None);
+        d.select_range(0..3);
+        d.add_caret(Caret::selecting(11, 8));
+        assert!(insert_at_carets(&mut d, "X"));
+        assert_eq!(d.text(), "X bar X");
+    }
+
+    #[test]
+    fn backspace_deletes_before_every_caret() {
+        let mut d = with_carets("abc\nabc\nabc", &[3, 7, 11]);
+        assert!(backspace_at_carets(&mut d));
+        assert_eq!(d.text(), "ab\nab\nab");
+        assert_eq!(d.caret_count(), 3);
+    }
+
+    #[test]
+    fn backspace_at_the_buffer_start_is_safe() {
+        let mut d = with_carets("ab", &[0, 2]);
+        assert!(backspace_at_carets(&mut d));
+        assert_eq!(d.text(), "a");
+    }
+
+    #[test]
+    fn delete_forward_removes_after_every_caret() {
+        let mut d = with_carets("abc\nabc", &[0, 4]);
+        assert!(delete_forward_at_carets(&mut d));
+        assert_eq!(d.text(), "bc\nbc");
+    }
+
+    #[test]
+    fn newline_auto_indents_each_line() {
+        let mut d = with_carets("    one\n    two", &[7, 15]);
+        assert!(newline_at_carets(&mut d, true));
+        assert_eq!(d.text(), "    one\n    \n    two\n    ");
+    }
+
+    #[test]
+    fn add_cursor_below_keeps_the_column() {
+        let mut d = doc("abc\ndef\nghi");
+        d.set_cursor(1);
+        assert!(add_cursor_vertical(&mut d, true, 4));
+        assert_eq!(caret_positions(&d), vec![1, 5]);
+    }
+
+    #[test]
+    fn add_cursor_above_walks_up_from_the_top_caret() {
+        let mut d = doc("abc\ndef\nghi");
+        d.set_cursor(9);
+        assert!(add_cursor_vertical(&mut d, false, 4));
+        assert_eq!(caret_positions(&d), vec![5, 9]);
+    }
+
+    #[test]
+    fn add_cursor_beyond_the_last_line_is_a_noop() {
+        let mut d = doc("abc");
+        assert!(!add_cursor_vertical(&mut d, true, 4));
+        assert!(!add_cursor_vertical(&mut d, false, 4));
+        assert_eq!(d.caret_count(), 1);
+    }
+
+    #[test]
+    fn add_cursor_shifts_a_selection_down_a_line() {
+        let mut d = doc("abc\ndef");
+        d.select_range(0..2);
+        assert!(add_cursor_vertical(&mut d, true, 4));
+        let carets = d.carets();
+        assert_eq!(carets.len(), 2);
+        let extra = carets.iter().find(|c| c.pos != d.cursor()).unwrap();
+        assert_eq!(extra.selection(), Some(4..6));
+    }
+
+    #[test]
+    fn next_occurrence_selects_the_word_then_extends() {
+        let mut d = doc("foo bar foo baz foo");
+        d.set_cursor(1);
+        assert_eq!(
+            add_cursor_to_next_occurrence(&mut d),
+            Occurrence::Added(2),
+            "the first press selects the word and adds its next match"
+        );
+        assert_eq!(d.selection(), Some(0..3));
+        let carets = d.carets();
+        assert_eq!(carets[1].selection(), Some(8..11));
+
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(3));
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Exhausted);
+        assert_eq!(d.caret_count(), 3);
+    }
+
+    #[test]
+    fn next_occurrence_respects_word_boundaries() {
+        let mut d = doc("cat category cat");
+        d.set_cursor(0);
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::Added(2));
+        assert_eq!(
+            d.carets()[1].selection(),
+            Some(13..16),
+            "the 'cat' inside 'category' is skipped"
+        );
+    }
+
+    #[test]
+    fn next_occurrence_needs_a_word() {
+        let mut d = doc("   ");
+        d.set_cursor(1);
+        assert_eq!(add_cursor_to_next_occurrence(&mut d), Occurrence::NoWord);
+        assert_eq!(d.caret_count(), 1);
+    }
+
+    #[test]
+    fn clipboard_text_joins_every_selection() {
+        let mut d = doc("foo bar foo");
+        d.select_range(0..3);
+        d.add_caret(Caret::selecting(11, 8));
+        assert_eq!(clipboard_text(&d), "foo\nfoo");
+    }
+
+    #[test]
+    fn cut_removes_every_selection() {
+        let mut d = doc("foo bar foo");
+        d.select_range(0..3);
+        d.add_caret(Caret::selecting(11, 8));
+        assert!(cut_at_carets(&mut d));
+        assert_eq!(d.text(), " bar ");
+        assert_eq!(
+            caret_positions(&d),
+            vec![0, 5],
+            "each caret stays where its own selection was"
+        );
     }
 }

@@ -101,7 +101,8 @@ fn cursor_visual_col(doc: &Document, line: usize, tab_width: usize) -> usize {
 struct PaintCtx<'a> {
     theme: &'a Theme,
     base: Style,
-    selection: Option<Range<usize>>,
+    /// Every caret's selection, ascending.
+    selections: &'a [Range<usize>],
     matches: &'a [Range<usize>],
     current_match: Option<usize>,
     brackets: Option<(usize, usize)>,
@@ -109,6 +110,9 @@ struct PaintCtx<'a> {
     show_ws: bool,
     show_guides: bool,
     cursor: usize,
+    /// Positions of the secondary carets, ascending. The primary caret is drawn
+    /// by the terminal itself.
+    extra_cursors: &'a [usize],
     cur_line: usize,
     text_x: u16,
     text_w: usize,
@@ -135,6 +139,7 @@ fn paint_line(
     let line_end = line_start + line_len;
     let mut token_idx = 0usize;
     let mut match_idx = ctx.matches.partition_point(|r| r.end <= line_start);
+    let mut sel_idx = ctx.selections.partition_point(|r| r.end <= line_start);
 
     let mut col = window.start_col;
     let mut ci = 0usize;
@@ -169,8 +174,12 @@ fn paint_line(
                     .fg(theme.match_fg);
             }
         }
-        if let Some(sel) = &ctx.selection {
-            if sel.contains(&abs) {
+        while sel_idx < ctx.selections.len() && ctx.selections[sel_idx].end <= abs {
+            sel_idx += 1;
+        }
+        if sel_idx < ctx.selections.len() {
+            let sel = &ctx.selections[sel_idx];
+            if sel.start <= abs && abs < sel.end {
                 style = style.bg(theme.selection_bg).fg(theme.selection_fg);
             }
         }
@@ -178,6 +187,11 @@ fn paint_line(
             if abs == a || abs == b {
                 style = style.fg(theme.bracket_match).add_modifier(Modifier::BOLD);
             }
+        }
+        // Secondary carets are painted as a block over their character, the
+        // same way the terminal draws the primary one.
+        if ctx.extra_cursors.binary_search(&abs).is_ok() {
+            style = style.bg(theme.cursor_bg).fg(theme.cursor_fg);
         }
         if abs == ctx.cursor && line == ctx.cur_line {
             cursor_pos.get_or_insert(Position::new(x, row));
@@ -250,12 +264,22 @@ fn paint_line(
     }
 
     // Selection covering the line break.
-    if let Some(sel) = &ctx.selection {
-        if sel.end > line_end && x < right {
-            buf[(x, row)]
-                .set_symbol(" ")
-                .set_style(Style::default().bg(theme.selection_bg));
-        }
+    let selection_covers_break = ctx
+        .selections
+        .iter()
+        .any(|sel| sel.start <= line_end && sel.end > line_end);
+    if selection_covers_break && x < right {
+        buf[(x, row)]
+            .set_symbol(" ")
+            .set_style(Style::default().bg(theme.selection_bg));
+    }
+
+    // A secondary caret at the end of the line has no character to paint over,
+    // so give it its own cell.
+    if x < right && ctx.extra_cursors.binary_search(&line_end).is_ok() {
+        buf[(x, row)]
+            .set_symbol(" ")
+            .set_style(Style::default().bg(theme.cursor_bg));
     }
 
     // Truncation marker when the line continues past the right edge.
@@ -343,10 +367,19 @@ impl EditorRenderer<'_> {
             );
         }
 
+        let selections = self.doc.selections();
+        let extra_positions: Vec<usize> = self.doc.extra_carets().iter().map(|c| c.pos).collect();
+        let caret_lines: Vec<usize> = self
+            .doc
+            .carets()
+            .iter()
+            .map(|c| self.doc.storage().line_of_char(c.pos))
+            .collect();
+
         let ctx = PaintCtx {
             theme,
             base,
-            selection: self.doc.selection(),
+            selections: &selections,
             matches: self.search.ranges(),
             current_match: self.search.matches.current,
             brackets: self.brackets,
@@ -354,6 +387,7 @@ impl EditorRenderer<'_> {
             show_ws: self.cfg.editor.show_whitespace,
             show_guides: self.cfg.editor.show_indent_guides,
             cursor: self.doc.cursor(),
+            extra_cursors: &extra_positions,
             cur_line,
             text_x,
             text_w,
@@ -411,7 +445,8 @@ impl EditorRenderer<'_> {
             }
 
             // ---------------- row background ----------------
-            if self.cfg.editor.highlight_cursor_line && line == cur_line && self.focused {
+            if self.cfg.editor.highlight_cursor_line && caret_lines.contains(&line) && self.focused
+            {
                 let band = Rect::new(text_x, y, text_w as u16, 1);
                 buf.set_style(band, Style::default().bg(theme.cursor_line_bg));
             }
