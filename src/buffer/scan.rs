@@ -188,6 +188,12 @@ fn find_ci_unicode(rope: &Rope, needle: &str, limit: usize) -> Vec<usize> {
                 if out.len() >= limit {
                     break;
                 }
+                // Start looking again only after this match: matches must not
+                // overlap, or a query of "ab" in "abab" would report 0..2,
+                // 1..3 and 2..4, double-counting in the status bar and giving
+                // replace-all overlapping edits to apply. The ASCII path gets
+                // this for free from `memmem`'s non-overlapping iterator.
+                window.clear();
             }
         }
     }

@@ -447,6 +447,25 @@ mod tests {
     }
 
     #[test]
+    fn unicode_matches_do_not_overlap() {
+        // A non-ASCII query takes the character-window scanner rather than the
+        // byte scanner, and that one used to step forward by a single character
+        // after a hit: "😀😀" in "😀😀😀" reported 0..2 *and* 1..3, which
+        // double-counted in the status bar and gave replace-all overlapping
+        // edits to apply.
+        let d = doc("😀😀😀");
+        let q = Query::literal("😀😀");
+        assert_eq!(find_all(d.storage(), &q, 100).unwrap(), vec![0..2]);
+    }
+
+    #[test]
+    fn ascii_matches_do_not_overlap_either() {
+        let d = doc("abab");
+        let q = Query::literal("ab");
+        assert_eq!(find_all(d.storage(), &q, 100).unwrap(), vec![0..2, 2..4]);
+    }
+
+    #[test]
     fn navigation_wraps() {
         let mut d = doc("a a a");
         let mut s = SearchState::new();
