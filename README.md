@@ -9,7 +9,7 @@ loses your work.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.2.0 │
+│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.3.0 │
 ├──────────────────────────────────────────────────────────────────────┤
 │  1  use std::ops::Range;                                             │
 │  2                                                                   │
@@ -117,6 +117,7 @@ The essentials:
 | `Alt+Click` | Add or remove a cursor |
 | `Ctrl+G` | Go to line |
 | `Ctrl+Tab` | Next buffer |
+| `Alt+W` | Toggle word wrap |
 | `F1` | Help |
 
 > **Terminals are not all the same.** `Ctrl+C` is delivered as `SIGINT` by many
