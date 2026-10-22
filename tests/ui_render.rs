@@ -211,6 +211,58 @@ fn command_palette_renders_rows() {
 }
 
 #[test]
+fn a_panel_hides_the_text_underneath_it() {
+    let scratch = Scratch::new();
+    // A marker that appears nowhere in the palette: the leak this guards
+    // against showed the file's own characters inside the panel's background.
+    let path = scratch.file("under.txt", &vec!["¤".repeat(70); 40].join("\n"));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    assert!(
+        screen(&mut app, 80, 24).iter().any(|r| r.contains('¤')),
+        "the file is on screen before the overlay opens"
+    );
+
+    app.open_palette(vela::ui::PaletteMode::Commands);
+    let buf = cells(&mut app, 80, 24);
+    dump(&mut app, 80, 24);
+
+    let panel = vela::ui::chrome::centered(ratatui::layout::Rect::new(0, 0, 80, 24), 80, 60);
+    for y in panel.y + 1..panel.y + panel.height - 1 {
+        for x in panel.x + 1..panel.x + panel.width - 1 {
+            assert_ne!(
+                buf[(x, y)].symbol(),
+                "¤",
+                "the file shows through the panel at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_find_bar_replaces_the_hint_row_instead_of_mixing_with_it() {
+    let scratch = Scratch::new();
+    let path = scratch.file("find.txt", "needle\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    assert!(
+        screen(&mut app, 80, 24).last().unwrap().contains('·'),
+        "the hint bar is on the last row to begin with"
+    );
+
+    ctrl(&mut app, 'f');
+    let rows = screen(&mut app, 80, 24);
+    dump(&mut app, 80, 24);
+    let bar = rows.last().expect("a last row");
+
+    assert!(bar.contains("Find"), "the bar is drawn: {bar:?}");
+    assert!(
+        !bar.contains('·'),
+        "the hints underneath are wiped, not blended: {bar:?}"
+    );
+}
+
+#[test]
 fn confirm_dialog_renders_its_choices() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());

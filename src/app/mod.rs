@@ -440,6 +440,25 @@ impl App {
         }
     }
 
+    /// Columns the line-number gutter occupies, which the renderer and every
+    /// screen-to-buffer mapping must agree on.
+    fn gutter_width(&self, doc: &crate::buffer::Document) -> u16 {
+        if !self.config.editor.line_numbers {
+            return 0;
+        }
+        (crate::ui::editor::decimal_digits(doc.line_count()).max(3) + 1) as u16
+    }
+
+    /// Columns the editor gives to text: its width minus the gutter. Zero
+    /// before the first frame, when the layout is not known yet.
+    fn text_width(&self) -> usize {
+        let Some(idx) = self.active_index() else {
+            return 0;
+        };
+        let gutter = self.gutter_width(&self.buffers[idx]);
+        (self.last_editor_area.width as usize).saturating_sub(gutter as usize)
+    }
+
     /// Map a screen position inside the editor to a buffer character index.
     fn buffer_position_at(&self, column: u16, row: u16) -> Option<usize> {
         let area = self.last_editor_area;
@@ -451,12 +470,7 @@ impl App {
         }
         let doc = &self.buffers[self.active_index()?];
         let cfg = &self.config;
-        let digits = crate::ui::editor::decimal_digits(doc.line_count()).max(3);
-        let gutter = if cfg.editor.line_numbers {
-            (digits + 1) as u16
-        } else {
-            0
-        };
+        let gutter = self.gutter_width(doc);
         if column < area.x + gutter {
             return None;
         }
@@ -487,12 +501,7 @@ impl App {
         let row = row.clamp(area.y, area.y + area.height - 1);
         let line =
             (doc.scroll_top() + (row - area.y) as usize).min(doc.line_count().saturating_sub(1));
-        let digits = crate::ui::editor::decimal_digits(doc.line_count()).max(3);
-        let gutter = if cfg.editor.line_numbers {
-            (digits + 1) as u16
-        } else {
-            0
-        };
+        let gutter = self.gutter_width(doc);
         let target_col = if column < area.x + gutter {
             0
         } else {
@@ -640,13 +649,19 @@ impl App {
     }
 
     /// Horizontal wheel scrolling, for lines wider than the window.
+    ///
+    /// The view stops once the longest line ends: past that point every cell is
+    /// blank, and scrolling into it would feel like an endless canvas.
     fn scroll_sideways(&mut self, delta: isize) {
         let Some(idx) = self.active_index() else {
             return;
         };
+        let tab_width = self.config.tab_width();
+        let text_width = self.text_width();
         let doc = &mut self.buffers[idx];
+        let limit = doc.content_width(tab_width).saturating_sub(text_width) as isize;
         let left = doc.scroll_left() as isize + delta;
-        doc.set_scroll_left(left.max(0) as usize);
+        doc.set_scroll_left(left.clamp(0, limit) as usize);
         doc.detach_view();
     }
 

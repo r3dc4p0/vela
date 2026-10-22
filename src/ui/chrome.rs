@@ -35,6 +35,24 @@ fn fill(buf: &mut Buffer, area: Rect, style: Style) {
     buf.set_style(area, style);
 }
 
+/// Blank a rectangle and give it a background, so nothing underneath shows
+/// through.
+///
+/// `Buffer::set_style` only patches colours — the symbols already in the cells
+/// survive. A panel that just sets a background therefore leaves the editor's
+/// text visible in every cell it does not write itself, and the overlay reads
+/// as if it were printed on top of the file rather than over it.
+pub fn wipe(buf: &mut Buffer, area: Rect, bg: Color) {
+    let area = area.intersection(buf.area);
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            let cell = &mut buf[(x, y)];
+            cell.reset();
+            cell.set_style(Style::default().bg(bg));
+        }
+    }
+}
+
 /// Top bar: identity on the left, session facts on the right.
 pub fn draw_topbar(buf: &mut Buffer, area: Rect, app: &App) {
     if area.height == 0 {
@@ -387,11 +405,11 @@ pub enum OverlayKind {
 /// Draw a bordered panel and return its inner area.
 pub fn panel(buf: &mut Buffer, area: Rect, title: &str, theme: &Theme) -> Rect {
     if area.width < 4 || area.height < 3 {
-        buf.set_style(area, Style::default().bg(theme.overlay_bg));
+        wipe(buf, area, theme.overlay_bg);
         return area;
     }
-    let style = Style::default().bg(theme.overlay_bg).fg(theme.fg);
-    buf.set_style(area, style);
+    wipe(buf, area, theme.overlay_bg);
+    buf.set_style(area, Style::default().fg(theme.fg));
 
     // Border: thin box drawing, accent coloured title.
     let w = area.width as usize;

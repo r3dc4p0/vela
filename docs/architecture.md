@@ -200,6 +200,11 @@ clear in the input layer, no timeout, and no way for a stale detached view to
 survive a keystroke. The status bar reads the same two numbers back to say where
 the cursor went (`statusbar_away`), since the caret itself is no longer painted.
 
+Both offsets are bounded by the content, not by the screen: `scroll_top` stops
+at the last full page, and `scroll_left` at `Document::content_width`, the width
+of the widest line. That width takes a scan of every line, so it is cached
+against the revision and the tab width — the callers are gestures, never frames.
+
 ### One command system
 
 `Command` is an enum with a stable id, a title, a category and default keys. Key
@@ -216,6 +221,13 @@ must run while the overlay is detached take the data they need as parameters
 (`replace_all_with(&str, bool)`) instead of reading `App::ui` — this is a rule,
 not an accident: a handler that reads `ui.overlay` while detached silently does
 nothing.
+
+Overlays are opaque because they blank their rectangle first (`chrome::wipe`)
+and only then paint. `Buffer::set_style` patches colours but leaves the symbols
+in place, so a panel that merely sets a background still shows the editor's text
+in every cell it does not write itself — the overlay looks printed *on top of*
+the file rather than *over* it. Any new surface that floats above the editor
+must wipe before it draws.
 
 ### Terminal lifecycle
 

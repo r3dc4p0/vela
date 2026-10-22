@@ -62,6 +62,9 @@ the status bar adds its line in amber, with `↑` or `↓` for the direction to
 scroll back. Any cursor movement — a key, a click, typing — brings the view
 back to the caret and drops the indicator.
 
+Scrolling stops where the text does: vertically at the last full page, and
+horizontally once the longest line ends.
+
 ## Navigation
 
 | Key | Command id | Action |

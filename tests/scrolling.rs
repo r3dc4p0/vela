@@ -13,6 +13,9 @@ use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEvent, MouseEventKind}
 use ratatui::layout::Rect;
 use vela::app::App;
 
+/// Columns taken by the line-number gutter: three digits plus one space.
+const GUTTER: usize = 4;
+
 /// One wheel notch. The column and row are irrelevant: the wheel scrolls the
 /// viewport wherever the pointer happens to be.
 fn wheel(app: &mut App, kind: MouseEventKind) {
@@ -269,6 +272,52 @@ fn the_sideways_wheel_survives_the_next_draw() {
         rows[area.y as usize].trim_start().starts_with("1 ijklmnop"),
         "the row starts at column 8: {:?}",
         rows[area.y as usize]
+    );
+}
+
+#[test]
+fn the_sideways_wheel_stops_at_the_end_of_the_longest_line() {
+    let scratch = Scratch::new();
+    // 120 columns of text in an 80-column window: 44 columns of slack, and not
+    // one more. Before the bound existed the wheel kept going forever into
+    // blank cells, which is what made the buffer feel like an endless canvas.
+    let path = scratch.file("wide.txt", &"a".repeat(120));
+    let mut app = editor(scratch.path());
+    let area = open_fixture(&mut app, &path, 80, 24);
+    let text_width = area.width as usize - GUTTER;
+
+    for _ in 0..30 {
+        wheel(&mut app, MouseEventKind::ScrollRight);
+    }
+    let rows = screen(&mut app, 80, 24);
+
+    assert_eq!(
+        app.buffers[0].scroll_left(),
+        120 - text_width,
+        "the view stops when the longest line ends"
+    );
+    assert_eq!(
+        rows[area.y as usize].matches('a').count(),
+        text_width,
+        "the last column of the line is flush with the right edge: {:?}",
+        rows[area.y as usize]
+    );
+}
+
+#[test]
+fn the_sideways_wheel_does_nothing_when_every_line_fits() {
+    let scratch = Scratch::new();
+    let path = scratch.file("narrow.txt", "short\nlines\n");
+    let mut app = editor(scratch.path());
+    open_fixture(&mut app, &path, 80, 24);
+
+    wheel(&mut app, MouseEventKind::ScrollRight);
+    wheel(&mut app, MouseEventKind::ScrollRight);
+
+    assert_eq!(
+        app.buffers[0].scroll_left(),
+        0,
+        "there is nothing to reveal"
     );
 }
 

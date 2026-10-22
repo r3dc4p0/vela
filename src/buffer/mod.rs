@@ -10,6 +10,7 @@ pub mod scan;
 pub mod storage;
 pub mod undo;
 
+use std::cell::Cell;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -197,6 +198,9 @@ pub struct Document {
     /// snaps back. A scroll gesture sets this flag so the renderer leaves the
     /// viewport alone; every path that moves the cursor clears it again.
     view_detached: bool,
+    /// Cached `(revision, tab_width, width)` of the widest line, since finding
+    /// it means scanning the whole buffer.
+    content_width: Cell<Option<(u64, usize, usize)>>,
     /// Modification time observed at load/save time.
     disk_mtime: Option<SystemTime>,
     /// Size observed at load/save time.
@@ -226,6 +230,7 @@ impl Document {
             scroll_left: 0,
             viewport_rows: 20,
             view_detached: false,
+            content_width: Cell::new(None),
             disk_mtime: None,
             disk_len: None,
             externally_modified: false,
@@ -405,6 +410,39 @@ impl Document {
     /// Let the view follow the cursor again.
     pub fn attach_view(&mut self) {
         self.view_detached = false;
+    }
+
+    /// Width of the widest line, in display columns.
+    ///
+    /// This is the horizontal extent of the document: nothing past it can be
+    /// scrolled into view, because there is nothing there. Tabs make it differ
+    /// from the character count, so it takes the tab width as an argument.
+    ///
+    /// Finding it means scanning every line, so the answer is cached against
+    /// the revision and the tab width. Callers are gestures, not frames.
+    pub fn content_width(&self, tab_width: usize) -> usize {
+        if let Some((revision, cached_tab_width, width)) = self.content_width.get() {
+            if revision == self.revision && cached_tab_width == tab_width {
+                return width;
+            }
+        }
+        let mut widest = 0usize;
+        for line in 0..self.storage.len_lines() {
+            let start = self.storage.line_start(line);
+            let text = self.storage.line_slice(line);
+            let chars = text.chars().count();
+            // `display_width` is the expensive path, so only take it when a tab
+            // can make the visual width differ from the character count.
+            let width = if text.contains('\t') {
+                motion::visual_col_of(self.storage.as_ref(), start, start + chars, tab_width)
+            } else {
+                chars
+            };
+            widest = widest.max(width);
+        }
+        self.content_width
+            .set(Some((self.revision, tab_width, widest)));
+        widest
     }
 
     // ---------------------------------------------------------------- cursor

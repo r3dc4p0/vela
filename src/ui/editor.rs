@@ -386,6 +386,11 @@ impl EditorRenderer<'_> {
             } else if cur_col >= left + text_w {
                 left = cur_col + 1 - text_w;
             }
+        } else {
+            // A detached view keeps the column the wheel left it on, but never
+            // past the end of the longest line: there is nothing to see there.
+            let limit = self.doc.content_width(tab_width).saturating_sub(text_w);
+            left = left.min(limit);
         }
         self.doc.set_scroll_left(left);
 

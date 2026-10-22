@@ -14,7 +14,7 @@ use crate::commands::{Category, Command};
 use crate::keymap::KeyChord;
 use crate::theme::Theme;
 
-use super::chrome::{centered, draw_field, fit, panel};
+use super::chrome::{centered, draw_field, fit, panel, wipe};
 
 /// Draw whichever overlay is open. Returns the cursor position, if any.
 ///
@@ -206,7 +206,7 @@ fn draw_find_bar(
         return None;
     }
     let row = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
-    buf.set_style(row, Style::default().bg(theme.overlay_bg));
+    wipe(buf, row, theme.overlay_bg);
     let label = flags_label(" Find", bar.case_sensitive, bar.whole_word, bar.regex);
     let cx = draw_field(
         buf,
@@ -233,8 +233,8 @@ fn draw_replace_bar(
     }
     let find_row = Rect::new(area.x, area.y + area.height - 2, area.width, 1);
     let rep_row = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
-    buf.set_style(find_row, Style::default().bg(theme.overlay_bg));
-    buf.set_style(rep_row, Style::default().bg(theme.overlay_bg));
+    wipe(buf, find_row, theme.overlay_bg);
+    wipe(buf, rep_row, theme.overlay_bg);
 
     let label = flags_label(" Find", bar.case_sensitive, bar.whole_word, bar.regex);
     let c1 = draw_field(
@@ -307,7 +307,7 @@ fn draw_prompt(
         return None;
     }
     let row = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
-    buf.set_style(row, Style::default().bg(theme.overlay_bg));
+    wipe(buf, row, theme.overlay_bg);
     let cx = draw_field(buf, row, label, value, cursor, theme, true);
     if !hint.is_empty() {
         let hw = hint.chars().count() as u16 + 1;
@@ -364,7 +364,7 @@ fn draw_path_prompt(
     }
 
     let row = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
-    buf.set_style(row, Style::default().bg(theme.overlay_bg));
+    wipe(buf, row, theme.overlay_bg);
     let cx = draw_field(
         buf,
         row,
