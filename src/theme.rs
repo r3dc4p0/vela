@@ -71,6 +71,9 @@ pub struct Theme {
     pub statusbar_bg: Color,
     pub statusbar_fg: Color,
     pub statusbar_accent: Color,
+    /// Used for the "the cursor is not on screen" readout, so it reads as a
+    /// remark about the view rather than as another coordinate.
+    pub statusbar_away: Color,
 
     pub hint_bg: Color,
     pub hint_fg: Color,
@@ -168,6 +171,7 @@ impl Theme {
             statusbar_bg: Color::Rgb(0x1c, 0x21, 0x2b),
             statusbar_fg: Color::Rgb(0x9a, 0xa3, 0xb5),
             statusbar_accent: Color::Rgb(0x7a, 0xb8, 0xd8),
+            statusbar_away: Color::Rgb(0xd8, 0xa8, 0x4f),
 
             hint_bg: Color::Rgb(0x1a, 0x1e, 0x27),
             hint_fg: Color::Rgb(0x6b, 0x74, 0x86),
@@ -238,6 +242,7 @@ impl Theme {
             statusbar_bg: Color::Rgb(0xef, 0xef, 0xea),
             statusbar_fg: Color::Rgb(0x4a, 0x50, 0x5a),
             statusbar_accent: Color::Rgb(0x1f, 0x6f, 0x96),
+            statusbar_away: Color::Rgb(0x9a, 0x6b, 0x1e),
 
             hint_bg: Color::Rgb(0xf2, 0xf2, 0xed),
             hint_fg: Color::Rgb(0x8a, 0x90, 0x9a),
@@ -333,6 +338,7 @@ impl Theme {
             "statusbar_bg" => self.statusbar_bg = c,
             "statusbar_fg" => self.statusbar_fg = c,
             "statusbar_accent" => self.statusbar_accent = c,
+            "statusbar_away" => self.statusbar_away = c,
             "hint_bg" => self.hint_bg = c,
             "hint_fg" => self.hint_fg = c,
             "selection_bg" => self.selection_bg = c,

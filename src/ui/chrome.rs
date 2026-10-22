@@ -5,7 +5,7 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 
 use crate::app::App;
@@ -229,22 +229,55 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
     } else {
         ((line as f32 / total as f32) * 100.0).round() as usize
     };
-    let mut right = String::new();
-    if doc.caret_count() > 1 {
-        right.push_str(&format!("{} cursors   ", doc.caret_count()));
-    }
-    right.push_str(&format!("Ln {line}, Col {col}   {pct}%   "));
+
+    // The view can be scrolled away from the caret, and then the position
+    // readout alone is misleading: it names a line the user cannot see. Say
+    // where the caret actually is, in its own colour and with an arrow for the
+    // direction to scroll back.
+    let cur_line = line.saturating_sub(1);
+    let top = doc.scroll_top();
+    let rows = doc.viewport_rows();
+    let away = if cur_line < top {
+        Some('↑')
+    } else if cur_line >= top + rows {
+        Some('↓')
+    } else {
+        None
+    };
+
+    // Right-aligned, so it is built as spans from the left of its own block and
+    // then placed as one unit.
+    let mut spans: Vec<(String, Color)> = Vec::new();
     if app.search.active && !app.search.query.is_empty() {
-        right = format!("{}   {right}", app.search.matches.counter());
+        spans.push((
+            format!("{}   ", app.search.matches.counter()),
+            theme.statusbar_accent,
+        ));
     }
-    let right_len = right.chars().count() as u16;
-    if right_len < area.width {
-        buf.set_string(
-            area.x + area.width - right_len,
-            area.y,
-            &right,
-            Style::default().fg(theme.statusbar_accent),
-        );
+    if doc.caret_count() > 1 {
+        spans.push((
+            format!("{} cursors   ", doc.caret_count()),
+            theme.statusbar_accent,
+        ));
+    }
+    if let Some(arrow) = away {
+        spans.push((format!("{arrow} Ln {line}   "), theme.statusbar_away));
+    }
+    spans.push((
+        format!("Ln {line}, Col {col}   {pct}%   "),
+        theme.statusbar_accent,
+    ));
+
+    let width: u16 = spans
+        .iter()
+        .map(|(text, _)| text.chars().count() as u16)
+        .sum();
+    if width < area.width {
+        let mut x = area.x + area.width - width;
+        for (text, color) in &spans {
+            buf.set_string(x, area.y, text, Style::default().fg(*color));
+            x += text.chars().count() as u16;
+        }
     }
 }
 

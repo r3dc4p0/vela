@@ -12,8 +12,8 @@ Ordered by what a user notices first, not by what is easiest.
   dark/light themes, visible whitespace, indent guides, bracket matching
 - Auto-indent, comment toggling, duplicate/delete/move lines, trim whitespace
 - Multi-cursor: stacked carets, select-next-occurrence, Alt+Click, one undo step
-- Mouse: click, drag-selection with edge autoscroll, double/triple-click, wheel
-  scrolling, tab switching
+- Mouse: click, drag-selection with edge autoscroll, double/triple-click,
+  free wheel scrolling with an off-screen cursor indicator, tab switching
 - Recent files, session restore, configuration with validation, logging
 - Terminal restoration on panic and on `SIGTERM`/`SIGINT`/`SIGHUP`/`SIGQUIT`
 - Encoding detection (UTF-8, UTF-16 with BOM), LF/CRLF/CR round-tripping

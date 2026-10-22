@@ -38,9 +38,11 @@ step, and `Esc` collapses back to one. Occurrences are matched literally, so a
 selection of `he` also finds the `he` inside `hello`.
 
 **Mouse** — click to place the cursor, drag to select (autoscrolling above and
-below the text), double-click for a word and triple-click for a line, wheel to
-scroll vertically and horizontally, and click a tab to switch buffers.
-`Alt+Click` adds a cursor. Disable the lot with `mouse = false`.
+below the text), double-click for a word and triple-click for a line, and click
+a tab to switch buffers. The wheel scrolls the view rather than the cursor, so
+it can look anywhere in the buffer; when the cursor leaves the screen the
+status bar keeps reporting its line, in amber. `Alt+Click` adds a cursor.
+Disable the lot with `mouse = false`.
 
 **Files** — multiple buffers with tabs; atomic saves (temp file + `fsync` +
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM

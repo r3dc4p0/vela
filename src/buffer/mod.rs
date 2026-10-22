@@ -190,6 +190,13 @@ pub struct Document {
     scroll_left: usize,
     /// Rows available in the last render (used to centre jumps).
     viewport_rows: usize,
+    /// True while the view has been scrolled away from the cursor.
+    ///
+    /// The renderer normally re-derives the first visible line from the cursor
+    /// every frame, which makes it impossible to scroll away: the next draw
+    /// snaps back. A scroll gesture sets this flag so the renderer leaves the
+    /// viewport alone; every path that moves the cursor clears it again.
+    view_detached: bool,
     /// Modification time observed at load/save time.
     disk_mtime: Option<SystemTime>,
     /// Size observed at load/save time.
@@ -218,6 +225,7 @@ impl Document {
             scroll_top: 0,
             scroll_left: 0,
             viewport_rows: 20,
+            view_detached: false,
             disk_mtime: None,
             disk_len: None,
             externally_modified: false,
@@ -379,6 +387,26 @@ impl Document {
         self.scroll_left = value;
     }
 
+    /// True when the view was scrolled away from the cursor and must not be
+    /// snapped back until the cursor moves again.
+    pub fn view_detached(&self) -> bool {
+        self.view_detached
+    }
+
+    /// Freeze the viewport where it is, independently of the cursor.
+    ///
+    /// Called by the scroll gestures. The renderer stops adjusting
+    /// [`scroll_top`](Self::scroll_top) and [`scroll_left`](Self::scroll_left)
+    /// until a cursor movement calls [`attach_view`](Self::attach_view).
+    pub fn detach_view(&mut self) {
+        self.view_detached = true;
+    }
+
+    /// Let the view follow the cursor again.
+    pub fn attach_view(&mut self) {
+        self.view_detached = false;
+    }
+
     // ---------------------------------------------------------------- cursor
 
     pub fn cursor(&self) -> usize {
@@ -391,6 +419,7 @@ impl Document {
         self.anchor = None;
         self.preferred_col = None;
         self.extra.clear();
+        self.attach_view();
     }
 
     /// Move the cursor while keeping the anchor (used by mouse drags).
@@ -400,6 +429,7 @@ impl Document {
         }
         self.cursor = idx.min(self.len_chars());
         self.extra.clear();
+        self.attach_view();
     }
 
     pub fn anchor(&self) -> Option<usize> {
@@ -451,6 +481,9 @@ impl Document {
             self.cursor = next;
             self.anchor = None;
         }
+        // A motion is the user taking the cursor somewhere, so the view stops
+        // being detached and follows it again.
+        self.attach_view();
 
         // Secondary carets follow the same motion, each keeping its own column.
         if !self.extra.is_empty() {
@@ -504,6 +537,7 @@ impl Document {
         self.anchor = Some(0);
         self.cursor = self.len_chars();
         self.extra.clear();
+        self.attach_view();
     }
 
     pub fn select_range(&mut self, range: Range<usize>) {
@@ -511,6 +545,7 @@ impl Document {
         self.cursor = range.end.min(self.len_chars());
         self.preferred_col = None;
         self.extra.clear();
+        self.attach_view();
     }
 
     /// Set the primary caret's selection without disturbing secondary carets.
@@ -522,6 +557,7 @@ impl Document {
         self.anchor = Some(range.start.min(len));
         self.cursor = range.end.min(len);
         self.preferred_col = None;
+        self.attach_view();
     }
 
     /// Move the cursor to `pos` with `anchor` as the other end of the
@@ -536,6 +572,7 @@ impl Document {
         self.anchor = Some(anchor.min(len));
         self.preferred_col = None;
         self.extra.clear();
+        self.attach_view();
     }
 
     pub fn clear_selection(&mut self) {
@@ -675,6 +712,7 @@ impl Document {
             // No-op edit: still move the cursor to the end of the "new" text.
             self.cursor = start + text.chars().count();
             self.anchor = None;
+            self.attach_view();
             return false;
         }
 
@@ -693,6 +731,7 @@ impl Document {
         self.cursor = cursor_after;
         self.anchor = None;
         self.preferred_col = None;
+        self.attach_view();
         self.revision += 1;
 
         self.history.push(undo::Transaction {
@@ -896,6 +935,7 @@ impl Document {
         self.anchor = primary_after.anchor.map(|a| a.min(len));
         self.set_extra_carets(extra_after);
         self.preferred_col = None;
+        self.attach_view();
         self.revision += 1;
 
         let extra_after = self.extra.clone();
@@ -946,6 +986,7 @@ impl Document {
         self.anchor = tx.anchor_before;
         self.set_extra_carets(tx.extra_before);
         self.preferred_col = None;
+        self.attach_view();
         self.revision += 1;
         true
     }
@@ -969,6 +1010,7 @@ impl Document {
         self.anchor = tx.anchor_after;
         self.set_extra_carets(tx.extra_after);
         self.preferred_col = None;
+        self.attach_view();
         self.revision += 1;
         true
     }
@@ -999,6 +1041,7 @@ impl Document {
         self.extra.clear();
         self.history = undo::History::default();
         self.revision += 1;
+        self.attach_view();
     }
 
     // ------------------------------------------------------------ navigation
@@ -1140,6 +1183,69 @@ mod tests {
             6,
             "the secondary advances from the same edge instead of running past 'd'"
         );
+    }
+
+    #[test]
+    fn every_way_of_moving_the_cursor_re_attaches_the_view() {
+        // Scroll-anywhere rests on one invariant: the view stops following the
+        // cursor only until the cursor moves. Every entry point is checked,
+        // because a method that forgets `attach_view` would leave the editor
+        // looking at the wrong part of the file until the next keystroke — a
+        // bug that no single call site reveals.
+        let mut d = doc("one\ntwo\nthree\n");
+        d.set_cursor(5);
+
+        d.detach_view();
+        d.move_cursor(Motion::Down, false, MotionCtx::default());
+        assert!(!d.view_detached(), "move_cursor");
+
+        d.detach_view();
+        d.set_cursor(0);
+        assert!(!d.view_detached(), "set_cursor");
+
+        d.detach_view();
+        d.set_cursor_extending(2);
+        assert!(!d.view_detached(), "set_cursor_extending");
+
+        d.detach_view();
+        d.select_all();
+        assert!(!d.view_detached(), "select_all");
+
+        d.detach_view();
+        d.select_range(0..2);
+        assert!(!d.view_detached(), "select_range");
+
+        d.detach_view();
+        d.set_primary_selection(0..2);
+        assert!(!d.view_detached(), "set_primary_selection");
+
+        d.detach_view();
+        d.set_selection(2, 0);
+        assert!(!d.view_detached(), "set_selection");
+
+        d.detach_view();
+        d.insert_text("x");
+        assert!(!d.view_detached(), "typing");
+
+        d.detach_view();
+        d.backspace();
+        assert!(!d.view_detached(), "backspace");
+
+        d.detach_view();
+        d.undo();
+        assert!(!d.view_detached(), "undo");
+
+        d.detach_view();
+        d.redo();
+        assert!(!d.view_detached(), "redo");
+
+        d.detach_view();
+        d.goto_line_col(1, 0);
+        assert!(!d.view_detached(), "goto_line_col");
+
+        d.detach_view();
+        d.reset_contents("fresh");
+        assert!(!d.view_detached(), "reset_contents");
     }
 
     #[test]

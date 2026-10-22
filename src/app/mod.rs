@@ -619,14 +619,24 @@ impl App {
         self.info(format!("{count} cursors"));
     }
 
+    /// Move the viewport without moving the cursor.
+    ///
+    /// A wheel scroll is a look-around gesture, not a motion: it may travel the
+    /// whole buffer and leaves the caret where it was, even off screen. The
+    /// view stops following the cursor until the next cursor movement, which
+    /// is what lets it go further than one page away from the caret.
     fn scroll_by(&mut self, delta: isize) {
         let Some(idx) = self.active_index() else {
             return;
         };
         let doc = &mut self.buffers[idx];
         let top = doc.scroll_top() as isize + delta;
-        let max = doc.line_count().saturating_sub(1) as isize;
+        // Stop at the last full page rather than at the last line, so the
+        // buffer never scrolls up into a screen of blank rows.
+        let rows = doc.viewport_rows().max(1);
+        let max = doc.line_count().saturating_sub(rows) as isize;
         doc.set_scroll_top(top.clamp(0, max) as usize);
+        doc.detach_view();
     }
 
     /// Horizontal wheel scrolling, for lines wider than the window.
@@ -637,6 +647,7 @@ impl App {
         let doc = &mut self.buffers[idx];
         let left = doc.scroll_left() as isize + delta;
         doc.set_scroll_left(left.max(0) as usize);
+        doc.detach_view();
     }
 
     // ------------------------------------------------------------ edit paths

@@ -45,10 +45,31 @@ fn line_window(doc: &Document, line: usize, left: usize, cells: usize, tab_width
     let line_len = storage.line_slice(line).chars().count();
 
     if line_len <= WHOLE_LINE_LIMIT {
+        let text = storage.line_slice(line);
+        // The whole line is cheap to materialise, but it still has to start at
+        // the scroll offset: painting it from column 0 would ignore
+        // `scroll_left` entirely, which silently hid the cursor whenever a line
+        // was wider than the window.
+        if left == 0 {
+            return Window {
+                text,
+                start_char: 0,
+                start_col: 0,
+            };
+        }
+        let mut ci = 0usize;
+        let mut col = 0usize;
+        for c in text.chars() {
+            if col >= left {
+                break;
+            }
+            col += char_width(c, col, tab_width);
+            ci += 1;
+        }
         return Window {
-            text: storage.line_slice(line),
-            start_char: 0,
-            start_col: 0,
+            text: text.chars().skip(ci).collect(),
+            start_char: ci,
+            start_col: col,
         };
     }
 
@@ -316,15 +337,23 @@ impl EditorRenderer<'_> {
         let (cur_line, _) = self.doc.cursor_line_col();
 
         // --- vertical scroll -------------------------------------------------
+        // The viewport is normally re-derived from the cursor every frame, so
+        // that motions keep the caret on screen. A scroll gesture detaches it:
+        // the user asked to look somewhere else, and snapping back on the next
+        // draw would undo the gesture. `attach_view` is called by every cursor
+        // movement, so the editor resumes following as soon as one happens.
         let scroll_off = self.cfg.editor.scroll_off.min(rows.saturating_sub(1) / 2);
         let mut top = self.doc.scroll_top().min(line_count.saturating_sub(1));
-        if cur_line < top + scroll_off {
-            top = cur_line.saturating_sub(scroll_off);
+        let following = !self.doc.view_detached();
+        if following {
+            if cur_line < top + scroll_off {
+                top = cur_line.saturating_sub(scroll_off);
+            }
+            if cur_line + scroll_off >= top + rows {
+                top = (cur_line + scroll_off + 1).saturating_sub(rows);
+            }
+            top = top.min(line_count.saturating_sub(1));
         }
-        if cur_line + scroll_off >= top + rows {
-            top = (cur_line + scroll_off + 1).saturating_sub(rows);
-        }
-        top = top.min(line_count.saturating_sub(1));
         self.doc.set_scroll_top(top);
 
         // --- layout ----------------------------------------------------------
@@ -338,20 +367,25 @@ impl EditorRenderer<'_> {
         }
 
         // --- horizontal scroll ----------------------------------------------
+        // Same rule as above: a detached view keeps the column the wheel left
+        // it on instead of being pulled back to the caret.
         let cur_col = cursor_visual_col(self.doc, cur_line, tab_width);
         let cur_line_len = self.doc.storage().line_slice(cur_line).chars().count();
         let mut left = self.doc.scroll_left();
-        if cur_line_len < WHOLE_LINE_LIMIT {
-            let start = self.doc.storage().line_start(cur_line);
-            let width = visual_col_of(self.doc.storage(), start, start + cur_line_len, tab_width);
-            if width <= text_w {
-                left = 0;
+        if following {
+            if cur_line_len < WHOLE_LINE_LIMIT {
+                let start = self.doc.storage().line_start(cur_line);
+                let width =
+                    visual_col_of(self.doc.storage(), start, start + cur_line_len, tab_width);
+                if width <= text_w {
+                    left = 0;
+                }
             }
-        }
-        if cur_col < left {
-            left = cur_col;
-        } else if cur_col >= left + text_w {
-            left = cur_col + 1 - text_w;
+            if cur_col < left {
+                left = cur_col;
+            } else if cur_col >= left + text_w {
+                left = cur_col + 1 - text_w;
+            }
         }
         self.doc.set_scroll_left(left);
 

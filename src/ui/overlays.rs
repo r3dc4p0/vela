@@ -536,7 +536,7 @@ pub fn help_lines(app: &App) -> Vec<String> {
     out.push("  Mouse".to_string());
     out.push("    Click / Drag           Place the cursor / select".to_string());
     out.push("    Double / Triple-click  Select a word / a line".to_string());
-    out.push("    Wheel                  Scroll (click a tab to switch)".to_string());
+    out.push("    Wheel                  Scroll the view, not the cursor".to_string());
     out.push(String::new());
     out.push("  Search bar".to_string());
     out.push("    Enter                  Next match".to_string());

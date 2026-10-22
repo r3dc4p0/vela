@@ -183,6 +183,23 @@ with the pointer, which keeps the selection direction — an upwards drag leaves
 the cursor on the upper edge, so the next arrow key moves the way the pointer
 did.
 
+### The viewport is derived, except when it is not
+
+`EditorRenderer` re-derives the first visible line and column from the cursor on
+every frame, which is what keeps motions and edits on screen without the rest of
+the code having to think about scrolling. That rule alone makes it impossible to
+look anywhere else: any other value of `scroll_top` is overwritten on the next
+draw.
+
+`Document::view_detached` is the single exception. A wheel gesture sets it, and
+the renderer then leaves both offsets alone — so the view can travel the whole
+buffer while the cursor stays put, off screen. Every path that moves the cursor
+calls `attach_view`, which is why the invariant is stated as *the view follows
+the cursor unless the last thing the user did was scroll*: there is no state to
+clear in the input layer, no timeout, and no way for a stale detached view to
+survive a keystroke. The status bar reads the same two numbers back to say where
+the cursor went (`statusbar_away`), since the caret itself is no longer painted.
+
 ### One command system
 
 `Command` is an enum with a stable id, a title, a category and default keys. Key
@@ -221,6 +238,7 @@ would dominate the startup budget.
 | Editing commands | `tests/editing_core.rs` drives the real `App` through real key events |
 | Multi-cursor | `tests/multi_cursor.rs`: caret sets, next occurrence, Alt+Click, undo, status bar, painted blocks |
 | Mouse | `tests/mouse.rs`: click, drag and direction, edge autoscroll, multi-click, wheel, tab clicks — coordinates derived from the published layout |
+| Scrolling | `tests/scrolling.rs`: the wheel detaching the view from the cursor, the off-screen indicator and its colour, re-attaching on motion and on typing, page clamping |
 | Workflows | `tests/workflow.rs`: buffers, search, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds, search range validity, save/load round trips |

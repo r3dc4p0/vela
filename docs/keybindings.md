@@ -56,6 +56,12 @@ section.
 | Wheel left / right | Scroll four columns (terminals that report it) |
 | Click a tab | Switch to that buffer |
 
+The wheel moves the view, never the cursor: it can travel the whole buffer and
+leaves the caret where it was, even off screen. While the caret is out of view
+the status bar adds its line in amber, with `↑` or `↓` for the direction to
+scroll back. Any cursor movement — a key, a click, typing — brings the view
+back to the caret and drops the indicator.
+
 ## Navigation
 
 | Key | Command id | Action |
