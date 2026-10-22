@@ -15,6 +15,22 @@ fn dump(app: &mut vela::app::App, width: u16, height: u16) {
     }
 }
 
+/// Render one frame and hand back the cell buffer, for assertions that need
+/// colours rather than text.
+fn cells(app: &mut vela::app::App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+    let mut terminal =
+        ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// The text of one rendered row, as drawn.
+fn row_text(buf: &ratatui::buffer::Buffer, y: u16) -> String {
+    (0..buf.area.width)
+        .map(|x| buf[(x, y)].symbol().to_string())
+        .collect()
+}
+
 #[test]
 fn draws_topbar_status_and_text() {
     let scratch = Scratch::new();
@@ -57,6 +73,41 @@ fn dirty_buffers_are_marked_in_the_topbar() {
 }
 
 #[test]
+fn the_active_tab_carries_a_line_along_its_top_edge() {
+    let scratch = Scratch::new();
+    let a = scratch.file("a.txt", "a\n");
+    let b = scratch.file("b.txt", "b\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &a);
+    open(&mut app, &b);
+
+    let accent = app.theme.tab_accent;
+    let strip = app.theme.tab_inactive_bg;
+    let buf = cells(&mut app, 80, 24);
+
+    // Row 1 is the line, row 2 the labels.
+    let labels = row_text(&buf, 2);
+    let a_col = labels.find("a.txt").expect("a.txt tab") as u16;
+    let b_col = labels.find("b.txt").expect("b.txt tab") as u16;
+
+    assert_eq!(
+        buf[(b_col, 1)].bg,
+        accent,
+        "the active tab has an accent line above it"
+    );
+    assert_eq!(
+        buf[(a_col, 1)].bg,
+        strip,
+        "an inactive tab has no line above it"
+    );
+    assert_ne!(
+        buf[(b_col, 2)].bg,
+        buf[(a_col, 2)].bg,
+        "the active tab is distinguished by its background"
+    );
+}
+
+#[test]
 fn tabs_appear_with_more_than_one_buffer() {
     let scratch = Scratch::new();
     let a = scratch.file("a.txt", "a\n");
@@ -66,8 +117,9 @@ fn tabs_appear_with_more_than_one_buffer() {
     open(&mut app, &b);
     let rows = screen(&mut app, 80, 24);
     dump(&mut app, 80, 24);
-    assert!(rows[1].contains("a.txt"), "both tabs are listed");
-    assert!(rows[1].contains("b.txt"));
+    // Row 1 is the accent line above the active tab, row 2 the labels.
+    assert!(rows[2].contains("a.txt"), "both tabs are listed");
+    assert!(rows[2].contains("b.txt"));
 }
 
 #[test]

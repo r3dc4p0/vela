@@ -97,6 +97,11 @@ pub fn draw_topbar(buf: &mut Buffer, area: Rect, app: &App) {
 }
 
 /// Buffer tab strip.
+///
+/// Two rows: the upper one carries the accent line marking the active tab —
+/// the terminal equivalent of `box-shadow: inset 0 2px 0 <accent>` — and the
+/// lower one the labels, separated by a hairline. When the terminal is too
+/// short for both, the labels take the single row.
 pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
     if area.height == 0 {
         return;
@@ -110,6 +115,9 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
             .fg(theme.tab_inactive_fg),
     );
 
+    let line_y = if area.height > 1 { Some(area.y) } else { None };
+    let label_y = area.y + area.height - 1;
+
     let mut x = area.x;
     let right = area.x + area.width;
     let mut shown = 0usize;
@@ -120,9 +128,20 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
             if doc.is_modified() { " ●" } else { "" }
         );
         let w = label.chars().count() as u16;
-        if x + w > right {
+        // One cell of gutter between adjacent tabs, drawn as a hairline.
+        let gap = if shown == 0 { 0 } else { 1 };
+        if x + gap + w > right {
             break;
         }
+        if gap == 1 {
+            let hairline = Style::default().bg(theme.tab_inactive_bg).fg(theme.border);
+            buf.set_string(x, label_y, "│", hairline);
+            if let Some(y) = line_y {
+                buf.set_string(x, y, "│", hairline);
+            }
+            x += 1;
+        }
+
         let active = i == app.active;
         let style = if active {
             Style::default()
@@ -134,16 +153,24 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
                 .bg(theme.tab_inactive_bg)
                 .fg(theme.tab_inactive_fg)
         };
-        buf.set_string(x, area.y, &label, style);
+        buf.set_string(x, label_y, &label, style);
+
+        if active {
+            if let Some(y) = line_y {
+                for cx in x..x + w {
+                    buf[(cx, y)].set_symbol(" ").set_bg(theme.tab_accent);
+                }
+            }
+        }
         x += w;
         shown += 1;
     }
     if shown < app.buffers.len() && x + 4 <= right {
         buf.set_string(
             x,
-            area.y,
+            label_y,
             format!(" +{} ", app.buffers.len() - shown),
-            Style::default().fg(theme.dim),
+            Style::default().bg(theme.tab_inactive_bg).fg(theme.dim),
         );
     }
 }
