@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vela — a fast terminal text editor</title>
+<meta name="description" content="Vela is a modal-free terminal text editor written in Rust. Familiar Ctrl-key shortcuts, 7 ms cold start, 100 MB files, and atomic saves that never corrupt your work.">
+<meta name="theme-color" content="#0e1116">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vela — a fast terminal text editor">
+<meta property="og:description" content="Modal-free editing with the shortcuts you already use. Written in Rust. Opens in 7 ms and never loses your work.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314171e'/%3E%3Crect x='8' y='8' width='4' height='16' fill='%23c8a05a'/%3E%3Crect x='15' y='8' width='10' height='3' fill='%237ab8d8'/%3E%3Crect x='15' y='14.5' width='7' height='3' fill='%238b93a3'/%3E%3Crect x='15' y='21' width='5' height='3' fill='%238b93a3'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #14171e;
+    --panel-2: #171b23;
+    --line: #232a35;
+    --line-soft: #1c222c;
+    --fg: #d7dce5;
+    --fg-dim: #9aa3b2;
+    --fg-faint: #7c8696;
+    --gold: #c8a05a;
+    --blue: #7ab8d8;
+    --green: #8fbf7f;
+    --violet: #b092d0;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 1080px;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* A single soft light source behind the hero, plus a faint grid. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(900px 480px at 50% -8%, rgba(200, 160, 90, 0.10), transparent 70%),
+      radial-gradient(700px 420px at 82% 12%, rgba(122, 184, 216, 0.06), transparent 72%);
+    z-index: 0;
+  }
+
+  body > * { position: relative; z-index: 1; }
+
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  .skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    background: var(--gold);
+    color: #12151b;
+    padding: 10px 16px;
+    font-weight: 600;
+    z-index: 99;
+  }
+  .skip:focus { left: 12px; top: 12px; }
+
+  .wrap {
+    width: 100%;
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ------------------------------------------------------------------ nav */
+
+  .nav {
+    border-bottom: 1px solid var(--line-soft);
+    background: rgba(14, 17, 22, 0.72);
+    backdrop-filter: blur(8px);
+  }
+
+  .nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    gap: 16px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .brand:hover { text-decoration: none; }
+  .brand .mark {
+    width: 9px;
+    height: 18px;
+    background: var(--gold);
+    display: inline-block;
+    border-radius: 1px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-size: 14px;
+  }
+  .nav-links a { color: var(--fg-dim); }
+  .nav-links a:hover { color: var(--fg); text-decoration: none; }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold);
+    border: 1px solid rgba(200, 160, 90, 0.35);
+    background: rgba(200, 160, 90, 0.08);
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  /* ----------------------------------------------------------------- hero */
+
+  .hero {
+    padding: 88px 0 40px;
+    text-align: center;
+  }
+
+  .hero h1 {
+    font-family: var(--mono);
+    font-size: clamp(38px, 7vw, 66px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    font-weight: 600;
+  }
+
+  .hero h1 .cursor {
+    display: inline-block;
+    width: 0.42em;
+    height: 0.78em;
+    background: var(--gold);
+    vertical-align: baseline;
+    margin-left: 0.1em;
+    border-radius: 1px;
+    animation: blink 1.15s steps(1, end) infinite;
+  }
+
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+  .hero p.lede {
+    font-size: clamp(17px, 2.1vw, 20px);
+    color: var(--fg-dim);
+    max-width: 660px;
+    margin: 0 auto 14px;
+  }
+
+  .hero p.lede strong { color: var(--fg); font-weight: 600; }
+
+  .hero .meta {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--fg-faint);
+    letter-spacing: 0.02em;
+    margin: 0 0 34px;
+  }
+  .hero .meta span { color: var(--line); margin: 0 8px; }
+
+  .cta-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 12px 22px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-primary {
+    background: var(--gold);
+    color: #12151b;
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: #d6b170; }
+
+  .btn-ghost {
+    background: var(--panel);
+    color: var(--fg);
+    border-color: var(--line);
+  }
+  .btn-ghost:hover { border-color: #33404f; background: var(--panel-2); }
+
+  /* ------------------------------------------------------------- terminal */
+
+  .demo { padding: 26px 0 10px; }
+
+  .term-shell {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    overflow: hidden;
+    max-width: 100%;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.03) inset,
+      0 30px 70px -30px rgba(0, 0, 0, 0.9),
+      0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+
+  .term-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: #2b333f; }
+  .term-title {
+    margin-left: 8px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-faint);
+    letter-spacing: 0.04em;
+  }
+
+  .term-scroll { overflow-x: auto; max-width: 100%; }
+
+  .term {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.62;
+    min-width: 640px;
+    color: var(--fg);
+  }
+
+  .term .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 14px;
+    background: #10131a;
+    font-size: 12px;
+  }
+
+  .term .bar.top { border-bottom: 1px solid var(--line-soft); }
+  .term .bar .left { color: var(--gold); letter-spacing: 0.1em; font-weight: 600; }
+  .term .bar .left .path { color: var(--fg-dim); letter-spacing: 0; font-weight: 400; }
+  .term .bar .left .dot-mod { color: var(--gold); }
+  .term .bar .right { color: var(--fg-faint); font-size: 11.5px; }
+
+  .term .tabs {
+    display: flex;
+    gap: 0;
+    background: #0f1218;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 12px;
+  }
+  .term .tab {
+    padding: 5px 14px;
+    color: var(--fg-faint);
+    border-right: 1px solid var(--line-soft);
+  }
+  .term .tab.active {
+    background: var(--panel);
+    color: var(--fg);
+    box-shadow: inset 0 2px 0 var(--gold);
+  }
+
+  .term .code { padding: 10px 0 12px; }
+
+  .term .row {
+    display: flex;
+    align-items: baseline;
+    white-space: pre;
+  }
+  .term .row:hover { background: rgba(255, 255, 255, 0.018); }
+
+  .term .gutter {
+    flex: 0 0 48px;
+    text-align: right;
+    padding-right: 14px;
+    color: #3d4654;
+    user-select: none;
+  }
+  .term .gutter.cur { color: var(--fg-faint); }
+  .term .code-body { padding-right: 18px; }
+
+  .term .row.cursorline { background: rgba(122, 184, 216, 0.045); }
+  .term .row.cursorline .gutter { color: var(--gold); }
+
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 1.05em;
+    background: var(--gold);
+    vertical-align: text-bottom;
+    margin: 0 -1px;
+    animation: blink 1.15s steps(1, end) infinite;
+  }
+
+  .kw { color: var(--gold); }
+  .ty { color: var(--blue); }
+  .st { color: var(--green); }
+  .cm { color: #5b6472; font-style: italic; }
+  .fn { color: #d9c08a; }
+  .mac { color: var(--violet); }
+  .op { color: #8b93a3; }
+
+  .term .status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 5px 14px;
+    background: #10131a;
+    border-top: 1px solid var(--line-soft);
+    font-size: 11.5px;
+    color: var(--fg-dim);
+  }
+  .term .status .seg { display: flex; align-items: center; gap: 12px; }
+  .term .status .lang { color: var(--gold); }
+  .term .status .pill {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0 6px;
+    border-radius: 3px;
+  }
+
+  .term .hints {
+    padding: 4px 14px 6px;
+    background: #0d1016;
+    border-top: 1px solid var(--line-soft);
+    font-size: 11px;
+    color: var(--fg-faint);
+    letter-spacing: 0.01em;
+  }
+  .term .hints b { color: var(--fg-dim); font-weight: 500; }
+
+  .caption {
+    text-align: center;
+    font-size: 13px;
+    color: var(--fg-faint);
+    margin: 16px 0 0;
+  }
+
+  /* ------------------------------------------------------------- sections */
+
+  section { padding: 76px 0; }
+
+  .sec-head { margin-bottom: 40px; max-width: 640px; }
+  .sec-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 12px;
+  }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: clamp(24px, 3.4vw, 32px);
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    margin: 0 0 12px;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .sec-head p { color: var(--fg-dim); margin: 0; font-size: 16px; }
+
+  /* ------------------------------------------------------------- features */
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .card {
+    background: var(--panel);
+    padding: 26px 24px 28px;
+    transition: background 0.15s ease;
+  }
+  .card:hover { background: var(--panel-2); }
+
+  .card::before {
+    content: "";
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--gold);
+    opacity: 0.75;
+    margin-bottom: 20px;
+  }
+
+  .card h3 {
+    font-size: 15.5px;
+    margin: 0 0 8px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+
+  .card p {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--fg-dim);
+    line-height: 1.62;
+  }
+
+  .card code, .inline-code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: rgba(255, 255, 255, 0.055);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #cbd3e0;
+  }
+
+  /* -------------------------------------------------------------- numbers */
+
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line-soft);
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .stat {
+    background: var(--bg);
+    padding: 34px 20px;
+    text-align: center;
+  }
+
+  .stat .val {
+    font-family: var(--mono);
+    font-size: clamp(24px, 3.6vw, 34px);
+    color: var(--fg);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .stat .val em { font-style: normal; color: var(--gold); }
+  .stat .lbl {
+    font-size: 12.5px;
+    color: var(--fg-faint);
+    margin-top: 8px;
+    letter-spacing: 0.01em;
+  }
+
+  /* ----------------------------------------------------------------- keys */
+
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0 48px;
+  }
+
+  .key-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 14.5px;
+  }
+  .key-row .what { color: var(--fg-dim); }
+
+  .key-row .combo {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+  .key-row:last-child { border-bottom: none; }
+
+  kbd {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+
+  /* -------------------------------------------------------------- install */
+
+  .install-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .install-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .copy {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-dim);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 9px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .copy:hover { color: var(--fg); border-color: #3a4552; }
+  .copy.done { color: var(--green); border-color: rgba(143, 191, 127, 0.4); }
+
+  pre {
+    margin: 0;
+    padding: 18px 16px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.75;
+    color: var(--fg);
+  }
+  pre .prompt { color: var(--fg-faint); user-select: none; }
+  pre .arg { color: var(--blue); }
+
+  .install-note {
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--fg-faint);
+    margin: 16px 0 0;
+  }
+
+  /* ----------------------------------------------------------------- next */
+
+  .next-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 48px;
+    align-items: start;
+  }
+
+  .next-list { list-style: none; padding: 0; margin: 0; }
+
+  .next-list li {
+    display: flex;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 14.5px;
+    color: var(--fg-dim);
+  }
+  .next-list li:last-child { border-bottom: none; }
+  .next-list .tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    height: fit-content;
+    flex: 0 0 auto;
+    margin-top: 2px;
+  }
+  .next-list .tag.soon { color: var(--blue); border-color: rgba(122, 184, 216, 0.3); }
+
+  /* --------------------------------------------------------------- footer */
+
+  footer {
+    border-top: 1px solid var(--line-soft);
+    padding: 40px 0 56px;
+    font-size: 13.5px;
+    color: var(--fg-faint);
+  }
+
+  footer .wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
+  footer a { color: var(--fg-dim); }
+  footer a:hover { color: var(--fg); }
+
+  .note-line {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: #4c5563;
+  }
+
+  /* ------------------------------------------------------------ responsive */
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .numbers { grid-template-columns: repeat(2, 1fr); }
+    .next-grid { grid-template-columns: 1fr; gap: 28px; }
+  }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 18px; }
+    .hero { padding: 60px 0 24px; }
+    section { padding: 56px 0; }
+    .nav-links { gap: 14px; }
+    .nav-links .hide-sm { display: none; }
+    .grid { grid-template-columns: 1fr; }
+    .keys { grid-template-columns: 1fr; gap: 0; }
+    .numbers { grid-template-columns: repeat(2, 1fr); }
+    .stat { padding: 26px 14px; }
+    .btn { width: 100%; justify-content: center; }
+    footer .wrap { flex-direction: column; gap: 18px; }
+    /* Narrow screens: shrink the mockup rather than let it hang off the edge. */
+    .term { min-width: 460px; font-size: 11.5px; }
+    .term .gutter { flex-basis: 38px; padding-right: 10px; }
+    pre { font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .hero h1 .cursor, .caret { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="mark" aria-hidden="true"></span> Vela
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#keys" class="hide-sm">Keys</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/stefanocarna/vela">GitHub&nbsp;&#8599;</a>
+      <span class="badge">v0.1.0</span>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero" id="top">
+    <div class="wrap">
+      <h1>vela<span class="cursor" aria-hidden="true"></span></h1>
+      <p class="lede">
+        A terminal text editor that doesn&rsquo;t make you learn a new language.
+        <strong>Ctrl+S</strong>&nbsp;saves, <strong>Ctrl+F</strong>&nbsp;finds,
+        <strong>Ctrl+Z</strong>&nbsp;undoes &mdash; the rest you already know.
+      </p>
+      <p class="meta">
+        Rust<span>&middot;</span>MIT licensed<span>&middot;</span>single static binary<span>&middot;</span>no runtime dependencies
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#install">Get started</a>
+        <a class="btn btn-ghost" href="https://github.com/stefanocarna/vela">View source</a>
+      </div>
+      <p class="meta" style="margin-bottom:0">
+        Pre-release &mdash; v0.1.0
+      </p>
+    </div>
+  </section>
+
+  <section class="demo">
+    <div class="wrap">
+      <div class="term-shell">
+        <div class="term-top">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="dot" aria-hidden="true"></span>
+          <span class="dot" aria-hidden="true"></span>
+          <span class="term-title">vela &mdash; 120&times;32</span>
+        </div>
+
+        <div class="term-scroll">
+          <div class="term" role="img" aria-label="Screenshot of Vela editing a Rust source file: a top bar, three buffer tabs, a line-number gutter, syntax-highlighted code, a status bar and a hint bar.">
+            <div class="bar top">
+              <span class="left">VELA <span class="path">&middot; src/buffer/mod.rs</span> <span class="dot-mod">&#9679;</span></span>
+              <span class="right">3 buffers&nbsp;&nbsp;&nbsp;v0.1.0</span>
+            </div>
+
+            <div class="tabs">
+              <span class="tab active">mod.rs</span>
+              <span class="tab">storage.rs</span>
+              <span class="tab">undo.rs</span>
+            </div>
+
+            <div class="code">
+              <div class="row"><span class="gutter">1</span><span class="code-body"><span class="kw">use</span> std<span class="op">::</span>ops<span class="op">::</span>Range<span class="op">;</span></span></div>
+              <div class="row"><span class="gutter">2</span><span class="code-body"></span></div>
+              <div class="row"><span class="gutter">3</span><span class="code-body"><span class="cm">/// A text buffer backed by a rope.</span></span></div>
+              <div class="row cursorline"><span class="gutter cur">4</span><span class="code-body"><span class="kw">pub struct</span> <span class="ty">Document</span> <span class="op">{</span></span></div>
+              <div class="row"><span class="gutter">5</span><span class="code-body">    storage<span class="op">:</span> <span class="ty">Box</span><span class="op">&lt;</span><span class="kw">dyn</span> <span class="ty">TextStorage</span><span class="op">&gt;,</span></span></div>
+              <div class="row"><span class="gutter">6</span><span class="code-body">    cursor<span class="op">:</span> <span class="ty">usize</span>,<span class="caret" aria-hidden="true"></span></span></div>
+              <div class="row"><span class="gutter">7</span><span class="code-body">    history<span class="op">:</span> <span class="ty">History</span><span class="op">,</span></span></div>
+              <div class="row"><span class="gutter">8</span><span class="code-body"><span class="op">}</span></span></div>
+              <div class="row"><span class="gutter">9</span><span class="code-body"></span></div>
+              <div class="row"><span class="gutter">10</span><span class="code-body"><span class="kw">impl</span> <span class="ty">Document</span> <span class="op">{</span></span></div>
+              <div class="row"><span class="gutter">11</span><span class="code-body">    <span class="kw">pub fn</span> <span class="fn">insert</span><span class="op">(&amp;</span><span class="kw">mut</span> self<span class="op">,</span> at<span class="op">:</span> <span class="ty">usize</span><span class="op">,</span> text<span class="op">:</span> <span class="op">&amp;</span><span class="ty">str</span><span class="op">)</span> <span class="op">{</span></span></div>
+              <div class="row"><span class="gutter">12</span><span class="code-body">        <span class="kw">let</span> tx <span class="op">=</span> self<span class="op">.</span>history<span class="op">.</span><span class="fn">begin</span><span class="op">(</span><span class="ty">TxKind</span><span class="op">::</span><span class="ty">Insert</span><span class="op">);</span></span></div>
+              <div class="row"><span class="gutter">13</span><span class="code-body">        self<span class="op">.</span>storage<span class="op">.</span><span class="fn">insert</span><span class="op">(</span>at<span class="op">,</span> text<span class="op">);</span></span></div>
+              <div class="row"><span class="gutter">14</span><span class="code-body">        self<span class="op">.</span>history<span class="op">.</span><span class="fn">commit</span><span class="op">(</span>tx<span class="op">,</span> at<span class="op">,</span> <span class="st">""</span><span class="op">,</span> text<span class="op">);</span></span></div>
+              <div class="row"><span class="gutter">15</span><span class="code-body">    <span class="op">}</span></span></div>
+              <div class="row"><span class="gutter">16</span><span class="code-body"><span class="op">}</span></span></div>
+            </div>
+
+            <div class="status">
+              <span class="seg">
+                <span class="lang">&#9679; Rust</span>
+                <span>LF</span>
+                <span>UTF-8</span>
+              </span>
+              <span class="seg">
+                <span>Ln 6, Col 17</span>
+                <span class="pill">38%</span>
+              </span>
+            </div>
+
+            <div class="hints">
+              <b>Ctrl+s</b> save &nbsp;&middot;&nbsp; <b>Ctrl+f</b> find &nbsp;&middot;&nbsp; <b>Ctrl+p</b> open file &nbsp;&middot;&nbsp; <b>Ctrl+Shift+p</b> commands &nbsp;&middot;&nbsp; <b>F1</b> help
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="caption">The actual interface &mdash; gutter, tabs, syntax highlighting, status bar, contextual hints.</p>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Why Vela</p>
+        <h2>An editor that stays out of the way</h2>
+        <p>No modes to memorise, no startup splash, no plugin manager to configure before you can type. Open it, edit, save.</p>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <h3>Opens before you blink</h3>
+          <p>7&nbsp;ms from process start to first frame. A rope buffer with O(1) snapshots keeps typing at <span class="inline-code">0.3&nbsp;&micro;s</span> per keystroke, even in a 1&nbsp;MiB file.</p>
+        </article>
+
+        <article class="card">
+          <h3>The keys you already press</h3>
+          <p><span class="inline-code">Ctrl+S</span>, <span class="inline-code">Ctrl+F</span>, <span class="inline-code">Ctrl+Z</span>, <span class="inline-code">Ctrl+P</span>. Every command is also in a fuzzy command palette when you forget the shortcut.</p>
+        </article>
+
+        <article class="card">
+          <h3>Nothing gets lost</h3>
+          <p>Saves are atomic: temp file, <span class="inline-code">fsync</span>, rename. A failed write leaves the original untouched and the buffer dirty &mdash; never a truncated file.</p>
+        </article>
+
+        <article class="card">
+          <h3>100 MB without stalling</h3>
+          <p>Streaming search scans 100&nbsp;MB in 23&nbsp;ms. Rendering only touches the visible lines, so scrolling a huge log stays smooth.</p>
+        </article>
+
+        <article class="card">
+          <h3>Your file, byte for byte</h3>
+          <p>UTF-8 and UTF-16 with BOM detection, LF/CRLF/CR preserved per file, permissions and symlinks kept, binary files refused rather than corrupted.</p>
+        </article>
+
+        <article class="card">
+          <h3>Undo you can trust</h3>
+          <p>Transaction-based history with coalescing that restores cursor and selection. Replace-all, indent and trim are each one undo step.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:0">
+    <div class="wrap" style="max-width:1180px">
+      <div class="numbers" style="border-radius:10px; border-left:1px solid var(--line-soft); border-right:1px solid var(--line-soft); overflow:hidden">
+        <div class="stat"><div class="val"><em>7</em> ms</div><div class="lbl">cold start</div></div>
+        <div class="stat"><div class="val"><em>1.3</em> ms</div><div class="lbl">open a 1 MiB file</div></div>
+        <div class="stat"><div class="val"><em>23</em> ms</div><div class="lbl">scan 100 MiB</div></div>
+        <div class="stat"><div class="val"><em>70</em> &micro;s</div><div class="lbl">render a frame</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="keys">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Muscle memory</p>
+        <h2>Shortcuts that don&rsquo;t need a cheat sheet</h2>
+        <p>Every binding is remappable in <span class="inline-code">config.toml</span>. <span class="inline-code">F1</span> builds its help screen from your live keymap, so it never goes stale.</p>
+      </div>
+
+      <div class="keys">
+        <div class="key-row"><span class="what">Save</span><span class="combo"><kbd>Ctrl</kbd> <kbd>S</kbd></span></div>
+        <div class="key-row"><span class="what">Find</span><span class="combo"><kbd>Ctrl</kbd> <kbd>F</kbd></span></div>
+        <div class="key-row"><span class="what">Save as</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>S</kbd></span></div>
+        <div class="key-row"><span class="what">Replace</span><span class="combo"><kbd>Ctrl</kbd> <kbd>H</kbd></span></div>
+        <div class="key-row"><span class="what">Open file</span><span class="combo"><kbd>Ctrl</kbd> <kbd>O</kbd></span></div>
+        <div class="key-row"><span class="what">Find next</span><span class="combo"><kbd>F3</kbd></span></div>
+        <div class="key-row"><span class="what">Fuzzy file finder</span><span class="combo"><kbd>Ctrl</kbd> <kbd>P</kbd></span></div>
+        <div class="key-row"><span class="what">Undo</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Z</kbd></span></div>
+        <div class="key-row"><span class="what">Command palette</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd></span></div>
+        <div class="key-row"><span class="what">Redo</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Y</kbd></span></div>
+        <div class="key-row"><span class="what">Go to line</span><span class="combo"><kbd>Ctrl</kbd> <kbd>G</kbd></span></div>
+        <div class="key-row"><span class="what">Next buffer</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Tab</kbd></span></div>
+        <div class="key-row"><span class="what">New buffer</span><span class="combo"><kbd>Ctrl</kbd> <kbd>N</kbd></span></div>
+        <div class="key-row"><span class="what">Cut / copy / paste</span><span class="combo"><kbd>Ctrl</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd></span></div>
+        <div class="key-row"><span class="what">Close buffer</span><span class="combo"><kbd>Ctrl</kbd> <kbd>W</kbd></span></div>
+        <div class="key-row"><span class="what">Help</span><span class="combo"><kbd>F1</kbd></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="sec-head center">
+        <p class="eyebrow">Get started</p>
+        <h2>Build it in one command</h2>
+        <p>Vela is not on crates.io yet. Clone it and install from source &mdash; you need Rust 1.82 or newer.</p>
+      </div>
+
+      <div class="install-box">
+        <div class="install-head">
+          <span>shell</span>
+          <button class="copy" data-copy="git clone https://github.com/stefanocarna/vela.git&#10;cd vela&#10;cargo install --path .">copy</button>
+        </div>
+        <pre><span class="prompt">$</span> git clone https://github.com/stefanocarna/vela.git
+<span class="prompt">$</span> cd vela
+<span class="prompt">$</span> cargo install --path .</pre>
+      </div>
+
+      <p class="install-note">
+        Then run <span class="inline-code">vela notes.md</span> in any terminal.
+        macOS, Linux and Windows are supported through crossterm.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="next-grid">
+        <div>
+          <p class="eyebrow">Status</p>
+          <h2>A working editor, not a finished product</h2>
+          <p style="color:var(--fg-dim); margin:0 0 18px">
+            Vela already opens, edits, searches and saves safely today. These are the pieces
+            deliberately left for later &mdash; the roadmap is public and ordered by what hurts most.
+          </p>
+          <p style="margin:0">
+            <a href="https://github.com/stefanocarna/vela/blob/main/docs/roadmap.md">Read the full roadmap&nbsp;&#8599;</a>
+          </p>
+        </div>
+
+        <ul class="next-list">
+          <li><span class="tag soon">next</span><span>Live external-change detection via a filesystem watcher</span></li>
+          <li><span class="tag soon">next</span><span>Split views and mouse-drag selection</span></li>
+          <li><span class="tag">later</span><span>Multi-cursor editing</span></li>
+          <li><span class="tag">later</span><span>Incremental regex search on very large files</span></li>
+          <li><span class="tag">later</span><span>LSP integration and a plugin surface</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <div class="brand" style="font-size:13px; margin-bottom:8px">
+        <span class="mark" aria-hidden="true" style="width:7px;height:14px"></span> Vela
+      </div>
+      <div>MIT licensed &middot; built with Rust, ratatui and crossterm.</div>
+      <div class="note-line">Pre-launch page &mdash; the full site is on its way.</div>
+    </div>
+    <div class="links">
+      <a href="https://github.com/stefanocarna/vela">Source</a>
+      <a href="https://github.com/stefanocarna/vela/blob/main/README.md">Docs</a>
+      <a href="https://github.com/stefanocarna/vela/blob/main/docs/keybindings.md">Key bindings</a>
+      <a href="https://github.com/stefanocarna/vela/blob/main/LICENSE">License</a>
+      <a href="https://github.com/stefanocarna/vela/issues">Issues</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy').replace(/&#10;/g, '\n');
+      var done = function () {
+        var old = btn.textContent;
+        btn.textContent = 'copied';
+        btn.classList.add('done');
+        setTimeout(function () {
+          btn.textContent = old;
+          btn.classList.remove('done');
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+</script>
+</body>
+</html>
