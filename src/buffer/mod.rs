@@ -10,7 +10,6 @@ pub mod scan;
 pub mod storage;
 pub mod undo;
 
-use std::cell::Cell;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -22,6 +21,12 @@ use crate::syntax::Language;
 pub use motion::{Motion, MotionCtx};
 pub use storage::{RopeStorage, Snapshot, TextStorage};
 pub use undo::TxKind;
+
+/// Longest line the renderer will materialise in one go, in characters.
+///
+/// A single-line file can be gigabytes; measuring or painting it whole would
+/// stall a frame. Past this length the line is handled in a window instead.
+pub const WHOLE_LINE_LIMIT: usize = 8 * 1024;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -198,9 +203,6 @@ pub struct Document {
     /// snaps back. A scroll gesture sets this flag so the renderer leaves the
     /// viewport alone; every path that moves the cursor clears it again.
     view_detached: bool,
-    /// Cached `(revision, tab_width, width)` of the widest line, since finding
-    /// it means scanning the whole buffer.
-    content_width: Cell<Option<(u64, usize, usize)>>,
     /// Modification time observed at load/save time.
     disk_mtime: Option<SystemTime>,
     /// Size observed at load/save time.
@@ -230,7 +232,6 @@ impl Document {
             scroll_left: 0,
             viewport_rows: 20,
             view_detached: false,
-            content_width: Cell::new(None),
             disk_mtime: None,
             disk_len: None,
             externally_modified: false,
@@ -412,36 +413,33 @@ impl Document {
         self.view_detached = false;
     }
 
-    /// Width of the widest line, in display columns.
+    /// Width of the widest line among the rows currently on screen.
     ///
-    /// This is the horizontal extent of the document: nothing past it can be
-    /// scrolled into view, because there is nothing there. Tabs make it differ
-    /// from the character count, so it takes the tab width as an argument.
+    /// This is where horizontal scrolling stops: past this column every visible
+    /// cell is blank.
     ///
-    /// Finding it means scanning every line, so the answer is cached against
-    /// the revision and the tab width. Callers are gestures, not frames.
-    pub fn content_width(&self, tab_width: usize) -> usize {
-        if let Some((revision, cached_tab_width, width)) = self.content_width.get() {
-            if revision == self.revision && cached_tab_width == tab_width {
-                return width;
-            }
-        }
+    /// It deliberately measures the *visible* rows rather than the whole
+    /// buffer. Scanning every line to answer "how wide is this document" costs
+    /// seconds on a large file — eighteen million lines take about eight — so
+    /// the first scroll after loading would freeze the UI to learn about text
+    /// the user cannot see. Twenty rows are cheap enough to measure every frame.
+    pub fn visible_width(&self, tab_width: usize, rows: usize) -> usize {
+        let first = self.scroll_top;
+        let last = (first + rows.max(1)).min(self.storage.len_lines());
         let mut widest = 0usize;
-        for line in 0..self.storage.len_lines() {
-            let start = self.storage.line_start(line);
+        for line in first..last {
             let text = self.storage.line_slice(line);
-            let chars = text.chars().count();
-            // `display_width` is the expensive path, so only take it when a tab
-            // can make the visual width differ from the character count.
-            let width = if text.contains('\t') {
-                motion::visual_col_of(self.storage.as_ref(), start, start + chars, tab_width)
+            let len = text.chars().count();
+            // Past the limit, measure by character count: expanding a huge line
+            // would cost a full scan, and the count is a lower bound that only
+            // tab inflation can exceed.
+            let width = if len < WHOLE_LINE_LIMIT {
+                motion::display_width(&text, 0, tab_width)
             } else {
-                chars
+                len
             };
             widest = widest.max(width);
         }
-        self.content_width
-            .set(Some((self.revision, tab_width, widest)));
         widest
     }
 

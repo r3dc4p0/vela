@@ -19,14 +19,12 @@ use ratatui::style::{Modifier, Style};
 use ratatui::Frame;
 
 use crate::buffer::motion::{char_width, visual_col_of};
-use crate::buffer::Document;
+use crate::buffer::{Document, WHOLE_LINE_LIMIT};
 use crate::config::Config;
 use crate::search::SearchState;
 use crate::syntax::{self, StateCache, Token};
 use crate::theme::Theme;
 
-/// Characters of a line we are willing to materialise in one go.
-const WHOLE_LINE_LIMIT: usize = 8 * 1024;
 /// Cap on the cursor-column scan for pathological single-line files.
 const CURSOR_SCAN_LIMIT: usize = 200_000;
 
@@ -388,8 +386,12 @@ impl EditorRenderer<'_> {
             }
         } else {
             // A detached view keeps the column the wheel left it on, but never
-            // past the end of the longest line: there is nothing to see there.
-            let limit = self.doc.content_width(tab_width).saturating_sub(text_w);
+            // past the end of the widest visible line: there is nothing to see
+            // there.
+            let limit = self
+                .doc
+                .visible_width(tab_width, rows)
+                .saturating_sub(text_w);
             left = left.min(limit);
         }
         self.doc.set_scroll_left(left);

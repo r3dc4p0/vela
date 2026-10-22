@@ -650,8 +650,9 @@ impl App {
 
     /// Horizontal wheel scrolling, for lines wider than the window.
     ///
-    /// The view stops once the longest line ends: past that point every cell is
-    /// blank, and scrolling into it would feel like an endless canvas.
+    /// The view stops once the widest line on screen ends: past that point
+    /// every visible cell is blank, and scrolling into it would feel like an
+    /// endless canvas.
     fn scroll_sideways(&mut self, delta: isize) {
         let Some(idx) = self.active_index() else {
             return;
@@ -659,7 +660,10 @@ impl App {
         let tab_width = self.config.tab_width();
         let text_width = self.text_width();
         let doc = &mut self.buffers[idx];
-        let limit = doc.content_width(tab_width).saturating_sub(text_width) as isize;
+        let rows = doc.viewport_rows();
+        let limit = doc
+            .visible_width(tab_width, rows)
+            .saturating_sub(text_width) as isize;
         let left = doc.scroll_left() as isize + delta;
         doc.set_scroll_left(left.clamp(0, limit) as usize);
         doc.detach_view();
