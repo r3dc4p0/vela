@@ -171,10 +171,14 @@ impl TextStorage for RopeStorage {
 
     fn line_of_char(&self, idx: usize) -> usize {
         let len = self.rope.len_chars();
-        if len == 0 {
-            return 0;
+        // A position at or past the end belongs to the last line — which is the
+        // empty line after a trailing newline. Clamping to `len - 1` instead
+        // would report a cursor at EOF as sitting on the previous line, so the
+        // caret would blink there while typing went to the new one.
+        if idx >= len {
+            return self.rope.len_lines().saturating_sub(1);
         }
-        self.rope.char_to_line(idx.min(len - 1))
+        self.rope.char_to_line(idx)
     }
 
     fn insert(&mut self, char_idx: usize, text: &str) {
@@ -221,6 +225,28 @@ mod tests {
         assert_eq!(storage("a\nb\n").len_lines(), 3);
         assert_eq!(storage("a\nb").len_lines(), 2);
         assert_eq!(storage("").len_lines(), 1);
+    }
+
+    #[test]
+    fn line_of_char_sees_the_final_empty_line() {
+        let s = storage("a\nb\n");
+        assert_eq!(s.line_of_char(0), 0);
+        assert_eq!(s.line_of_char(1), 0, "the newline closes line 0");
+        assert_eq!(s.line_of_char(2), 1);
+        assert_eq!(s.line_of_char(3), 1, "the last newline closes line 1");
+        assert_eq!(
+            s.line_of_char(4),
+            2,
+            "one past the end is the empty line after the trailing newline"
+        );
+    }
+
+    #[test]
+    fn line_of_char_clamps_past_the_end() {
+        assert_eq!(storage("abc").line_of_char(3), 0, "no trailing newline");
+        assert_eq!(storage("abc").line_of_char(99), 0);
+        assert_eq!(storage("").line_of_char(0), 0);
+        assert_eq!(storage("").line_of_char(7), 0);
     }
 
     #[test]

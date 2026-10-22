@@ -19,6 +19,26 @@ fn typing_inserts_at_the_cursor() {
 }
 
 #[test]
+fn enter_at_the_end_of_a_file_lands_on_the_new_line() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+    type_str(&mut app, "abc");
+    plain(&mut app, KeyCode::Enter);
+
+    assert_eq!(text(&app), "abc\n");
+    assert_eq!(cursor(&app), 4);
+    assert_eq!(
+        app.buffers[0].cursor_line_col(),
+        (1, 0),
+        "a cursor just past the newline belongs to the new, empty line"
+    );
+
+    // And what is typed next must land on that line, not the previous one.
+    type_str(&mut app, "x");
+    assert_eq!(text(&app), "abc\nx");
+}
+
+#[test]
 fn enter_splits_a_line_and_keeps_the_indentation() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());

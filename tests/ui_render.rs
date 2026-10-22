@@ -15,6 +15,44 @@ fn dump(app: &mut vela::app::App, width: u16, height: u16) {
     }
 }
 
+/// Render one frame and hand back the cell buffer, for assertions that need
+/// colours rather than text.
+fn cells(app: &mut vela::app::App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+    let mut terminal =
+        ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+#[test]
+fn a_new_line_at_the_end_of_the_file_moves_the_cursor_line() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+    type_str(&mut app, "abc");
+    plain(&mut app, KeyCode::Enter);
+
+    // The status bar reads the same cursor position the renderer uses.
+    let rows = screen(&mut app, 80, 24);
+    let status = rows
+        .iter()
+        .find(|row| row.contains("Ln "))
+        .expect("status bar");
+    assert!(status.contains("Ln 2, Col 1"), "status bar: {status}");
+
+    // And the highlighted cursor line is the new, empty one.
+    let highlight = app.theme.cursor_line_bg;
+    let buf = cells(&mut app, 80, 24);
+    let editor = app.editor_area();
+    let lit: Vec<u16> = (editor.y..editor.y + editor.height)
+        .filter(|&y| (editor.x..editor.x + editor.width).any(|x| buf[(x, y)].bg == highlight))
+        .collect();
+    assert_eq!(
+        lit,
+        vec![editor.y + 1],
+        "the second editor row is the cursor line"
+    );
+}
+
 #[test]
 fn draws_topbar_status_and_text() {
     let scratch = Scratch::new();
