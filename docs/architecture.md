@@ -176,6 +176,15 @@ tail is still being found, `next` at the end of the live list reports "searching
 instead of wrapping: wrapping there is precisely the bug the split exists to fix,
 because it silently hides everything past the cap.
 
+What the bar opens with is a precedence, not a fallback: the selection, else the
+last query, else the word under the cursor. Seeding from the *word* whenever the
+caret merely touches one widens the search behind the user's back — select `wor`
+inside `word` and the query becomes `word`, a different and larger query than
+the text that was pointed at. For the same reason the search is anchored on the
+*start* of the selection: the caret sits at its end, and a position at the end of
+a match reads as "past it", so opening find on a selected match would otherwise
+step straight to the following occurrence.
+
 ### Display-width-correct rendering
 
 The renderer works in terminal columns, not characters: tabs expand to the next
@@ -302,7 +311,7 @@ would dominate the startup budget.
 | Scrolling | `tests/scrolling.rs`: the wheel detaching the view from the cursor, the off-screen indicator and its colour, re-attaching on motion and on typing, page clamping |
 | Word wrap | `tests/word_wrap.rs`: painting across rows, one line number per line, the toggle and its binding, the view following the caret down a tall line, row-based wheel steps, and click/drag through a wrap boundary |
 | Large searches | `tests/search_large.rs`: a document with more matches than the live scan collects — committing finds the rest, `next` reaches the last match before wrapping, `prev` wraps to the true last one, and Replace All does not stop at the cap |
-| Workflows | `tests/workflow.rs`: buffers, search, replace, palette, quit, external changes |
+| Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |
 | Performance | `benches/core_bench.rs` (Criterion) |

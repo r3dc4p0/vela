@@ -52,9 +52,11 @@ recent files; session restore.
 
 **Search** — incremental search with case, whole-word and regex toggles;
 find & replace including replace-all as a single undo step; match counter;
-`F3`/`Shift+F3` to repeat. Typing is answered from a fast first pass, and the
-rest of the file is scanned in the background once you press Enter or `F3`, so
-every match is reachable — including in files too large to scan per keystroke.
+`F3`/`Shift+F3` to repeat. `Ctrl+F` searches what you selected, verbatim — a
+partial selection stays partial. Typing is answered from a fast first pass, and
+the rest of the file is scanned in the background once you press Enter or `F3`,
+so every match is reachable — including in files too large to scan per
+keystroke.
 
 **Navigation** — go to line/column, fuzzy file finder (`Ctrl+P`), command
 palette (`Ctrl+Shift+P`), help screen generated from the live keymap.

@@ -80,7 +80,7 @@ horizontally once the longest line ends.
 
 | Key | Command id | Action |
 | --- | --- | --- |
-| `Ctrl+F` | `search.find` | Incremental find (pre-fills the word under the cursor) |
+| `Ctrl+F` | `search.find` | Incremental find, pre-filled with the selection (else the last query, else the word under the cursor) |
 | `Ctrl+H` | `search.replace` | Find and replace |
 | `F3` / `Shift+F3` | `search.findNext` / `search.findPrev` | Repeat the last search |
 | `Alt+C` / `Alt+W` / `Alt+R` | — | Toggle case sensitivity / whole word / regex |

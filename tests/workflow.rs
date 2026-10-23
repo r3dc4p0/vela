@@ -125,6 +125,128 @@ fn find_respects_case_sensitivity_toggle() {
 }
 
 #[test]
+fn find_seeds_from_a_partial_selection() {
+    let scratch = Scratch::new();
+    let path = scratch.file("part.txt", "word word\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    // Select `wor` out of the first `word`.
+    ctrl(&mut app, KeyCode::Home);
+    for _ in 0..3 {
+        shift(&mut app, KeyCode::Right);
+    }
+    assert_eq!(app.active_doc().unwrap().selected_text(), "wor");
+
+    ctrl(&mut app, 'f');
+    assert_eq!(
+        app.search.query.text, "wor",
+        "the selection is the query, not the word it sits in"
+    );
+    assert_eq!(app.search.matches.len(), 2, "both prefixes match");
+    assert_eq!(
+        app.active_doc().unwrap().selected_text(),
+        "wor",
+        "and the selection stays the focused match"
+    );
+    assert_eq!(
+        cursor(&app),
+        3,
+        "rather than stepping to the next occurrence"
+    );
+}
+
+#[test]
+fn find_keeps_the_occurrence_the_caret_is_inside() {
+    let scratch = Scratch::new();
+    let path = scratch.file("inside.txt", "word word\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    // Caret in the middle of the first `word`, nothing selected.
+    ctrl(&mut app, KeyCode::Home);
+    plain(&mut app, KeyCode::Right);
+    plain(&mut app, KeyCode::Right);
+    ctrl(&mut app, 'f');
+
+    assert_eq!(app.search.query.text, "word");
+    assert_eq!(
+        app.active_doc().unwrap().selected_text(),
+        "word",
+        "the occurrence under the caret, not the following one"
+    );
+    assert_eq!(cursor(&app), 4);
+}
+
+#[test]
+fn find_seeds_from_the_selection_over_the_previous_query() {
+    let scratch = Scratch::new();
+    let path = scratch.file("prev.txt", "one two\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    ctrl(&mut app, 'f');
+    ctrl(&mut app, 'u');
+    for ch in "one".chars() {
+        press(&mut app, KeyCode::Char(ch), KeyModifiers::NONE);
+    }
+    plain(&mut app, KeyCode::Esc);
+    assert_eq!(app.search.query.text, "one");
+
+    // Select `two` and open find again: the selection is what was pointed at.
+    app.active_doc_mut().unwrap().select_range(4..7);
+    ctrl(&mut app, 'f');
+    assert_eq!(app.search.query.text, "two");
+    assert_eq!(app.active_doc().unwrap().selected_text(), "two");
+}
+
+#[test]
+fn find_keeps_the_previous_query_when_nothing_is_selected() {
+    let scratch = Scratch::new();
+    let path = scratch.file("keep.txt", "one two\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    ctrl(&mut app, 'f');
+    ctrl(&mut app, 'u');
+    for ch in "two".chars() {
+        press(&mut app, KeyCode::Char(ch), KeyModifiers::NONE);
+    }
+    plain(&mut app, KeyCode::Esc);
+
+    // Collapse the selection so the caret merely rests inside a word.
+    plain(&mut app, KeyCode::Left);
+    assert!(!app.active_doc().unwrap().has_selection());
+    ctrl(&mut app, 'f');
+    assert_eq!(
+        app.search.query.text, "two",
+        "reopening find resumes the last query"
+    );
+}
+
+#[test]
+fn find_narrows_a_multiline_selection_to_its_first_line() {
+    let scratch = Scratch::new();
+    let path = scratch.file("multi.txt", "alpha\nbeta\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    // Select from the start of line 1 into line 2.
+    ctrl(&mut app, KeyCode::Home);
+    shift(&mut app, KeyCode::End);
+    shift(&mut app, KeyCode::Right);
+    shift(&mut app, KeyCode::Right);
+    assert_eq!(app.active_doc().unwrap().selected_text(), "alpha\nb");
+
+    ctrl(&mut app, 'f');
+    assert_eq!(
+        app.search.query.text, "alpha",
+        "the find bar is one line, so it takes the selection's first line"
+    );
+    assert_eq!(app.search.matches.len(), 1);
+}
+
+#[test]
 fn replace_all_is_a_single_undo_step() {
     let scratch = Scratch::new();
     let path = scratch.file("rep.txt", "cat cat cat\n");

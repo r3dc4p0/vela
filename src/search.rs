@@ -514,7 +514,13 @@ impl SearchState {
         self.matches.truncated && self.matches.current == Some(0)
     }
 
-    /// Focus the first match at or after `cursor`, wrapping around.
+    /// Focus the match the cursor is on, or the first one after it.
+    ///
+    /// "On" includes the end, because selecting a match leaves the caret there.
+    /// A match that contains the position wins over one that merely starts
+    /// later: the position is what the user is looking at, and opening find
+    /// from the middle of a word should keep that occurrence rather than jump
+    /// to the next one.
     pub fn select_nearest(&mut self, cursor: usize) {
         if self.matches.ranges.is_empty() {
             self.matches.current = None;
@@ -524,7 +530,8 @@ impl SearchState {
             .matches
             .ranges
             .iter()
-            .position(|r| r.start >= cursor)
+            .position(|r| r.start <= cursor && cursor <= r.end)
+            .or_else(|| self.matches.ranges.iter().position(|r| r.start >= cursor))
             .unwrap_or(0);
         self.matches.current = Some(idx);
     }

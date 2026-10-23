@@ -125,9 +125,17 @@ impl App {
         let existing = self.search.query.clone();
         // Anchor incremental search on where the cursor was when the bar
         // opened, not on the live cursor (see `SearchState::origin`).
-        self.search.origin = self.active_doc().map(|d| d.cursor()).unwrap_or(0);
+        //
+        // The *start* of a selection when there is one: that is the position
+        // the user pointed at, and the caret only marks its end.
+        let origin = self
+            .active_doc()
+            .map(|doc| doc.selection().map_or_else(|| doc.cursor(), |r| r.start))
+            .unwrap_or(0);
+        self.search.origin = origin;
+
         let mut bar = FindBar::new();
-        bar.input = TextInput::with(existing.text.clone());
+        bar.input = TextInput::with(self.find_seed(&existing));
         bar.case_sensitive = existing.case_sensitive;
         bar.whole_word = existing.whole_word;
         bar.regex = existing.regex;
@@ -142,22 +150,33 @@ impl App {
         } else {
             self.ui.overlay = Overlay::Find(bar);
         }
+        self.sync_search_from_overlay(true);
+    }
 
-        // Pre-select the current word so Ctrl+F behaves like other editors.
-        if existing.text.is_empty() {
-            if let Some(doc) = self.active_doc() {
-                let word = doc.word_at_cursor();
-                if !word.is_empty() {
-                    let input = TextInput::with(word);
-                    match &mut self.ui.overlay {
-                        Overlay::Find(f) => f.input = input,
-                        Overlay::Replace(r) => r.input = input,
-                        _ => {}
-                    }
-                }
+    /// The text the find bar opens with.
+    ///
+    /// A selection wins over the previous query, and the previous query wins
+    /// over the word under the cursor. Seeding from the *word* whenever the
+    /// caret merely touches one widens the search behind the user's back:
+    /// select `wor` inside `word`, press Ctrl+F, and the query becomes `word` —
+    /// a different, larger one than the text that was pointed at.
+    fn find_seed(&self, existing: &Query) -> String {
+        if let Some(doc) = self.active_doc() {
+            let selected = doc.selected_text();
+            // The bar is a single line, so a selection spanning lines is
+            // narrowed to its first one rather than flattened into something
+            // that cannot be typed back in.
+            let first = selected.lines().next().unwrap_or_default();
+            if !first.is_empty() {
+                return first.to_string();
             }
         }
-        self.sync_search_from_overlay(true);
+        if !existing.text.is_empty() {
+            return existing.text.clone();
+        }
+        self.active_doc()
+            .map(|doc| doc.word_at_cursor())
+            .unwrap_or_default()
     }
 
     pub fn open_help(&mut self) {
