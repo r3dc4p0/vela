@@ -94,12 +94,54 @@ impl Default for EditorSettings {
     }
 }
 
+/// How the chrome is drawn.
+///
+/// `Pixel` composes borders and dividers out of hairlines — a rule costs a
+/// fraction of a cell instead of a whole one — which is what the design on the
+/// project page is drawn with. `Cell` is the original block-glyph look: every
+/// border is a full cell of `│` or `─`. It is kept because it is the more
+/// legible of the two on fonts that render the eighth-block glyphs badly, and
+/// because it is what long-time users are used to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UiStyle {
+    #[default]
+    Pixel,
+    Cell,
+}
+
+impl UiStyle {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "pixel" | "hairline" | "" => Some(UiStyle::Pixel),
+            "cell" | "block" | "classic" | "plain" => Some(UiStyle::Cell),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            UiStyle::Pixel => "pixel",
+            UiStyle::Cell => "cell",
+        }
+    }
+
+    /// The style the toggle command switches to.
+    pub fn other(self) -> Self {
+        match self {
+            UiStyle::Pixel => UiStyle::Cell,
+            UiStyle::Cell => UiStyle::Pixel,
+        }
+    }
+}
+
 /// Chrome and interaction settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiSettings {
     /// Theme name: `vela-dark` or `vela-light`.
     pub theme: String,
+    /// Drawing style: `pixel` (hairlines) or `cell` (block borders).
+    pub style: String,
     /// Show the contextual shortcut hints bar.
     pub show_hints: bool,
     /// Show the buffer tab strip when more than one buffer is open.
@@ -116,6 +158,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             theme: "vela-dark".to_string(),
+            style: "pixel".to_string(),
             show_hints: true,
             show_tabs: true,
             mouse: true,
@@ -272,6 +315,12 @@ impl Config {
         if self.ui.message_timeout_ms > 60_000 {
             warnings.push("ui.message_timeout_ms capped at 60000".to_string());
         }
+        if UiStyle::parse(&self.ui.style).is_none() {
+            warnings.push(format!(
+                "ui.style='{}' is not a known style; using pixel",
+                self.ui.style
+            ));
+        }
         if self.files.recent_files > 500 {
             warnings.push("files.recent_files capped at 500".to_string());
         }
@@ -295,6 +344,11 @@ impl Config {
     /// Effective tab width.
     pub fn tab_width(&self) -> usize {
         self.editor.tab_width.clamp(1, 16)
+    }
+
+    /// Effective drawing style, falling back to the default on a bad value.
+    pub fn ui_style(&self) -> UiStyle {
+        UiStyle::parse(&self.ui.style).unwrap_or_default()
     }
 
     /// The string inserted for one indent level.
@@ -365,5 +419,32 @@ mod tests {
     fn key_overrides_are_parsed() {
         let (c, _) = Config::from_toml("[keys]\n\"ctrl+s\" = \"file.save\"\n").unwrap();
         assert_eq!(c.keys.get("ctrl+s").map(String::as_str), Some("file.save"));
+    }
+
+    #[test]
+    fn the_ui_style_is_a_name_with_aliases_and_a_safe_default() {
+        assert_eq!(UiStyle::parse("pixel"), Some(UiStyle::Pixel));
+        assert_eq!(UiStyle::parse(" CELL "), Some(UiStyle::Cell));
+        assert_eq!(UiStyle::parse("classic"), Some(UiStyle::Cell));
+        assert_eq!(UiStyle::parse("pixle"), None);
+
+        // A typo must not stop the editor from starting: the field falls back
+        // to the default and `validate` says so.
+        let (c, _) = Config::from_toml("[ui]\nstyle = \"pixle\"\n").unwrap();
+        assert_eq!(c.ui_style(), UiStyle::Pixel);
+        assert!(c.validate().iter().any(|w| w.contains("ui.style")));
+
+        let (c, _) = Config::from_toml("[ui]\nstyle = \"cell\"\n").unwrap();
+        assert_eq!(c.ui_style(), UiStyle::Cell);
+        assert!(c.validate().is_empty());
+    }
+
+    #[test]
+    fn the_style_survives_a_roundtrip() {
+        let mut c = Config::default();
+        c.ui.style = "cell".to_string();
+        let text = c.to_toml().unwrap();
+        let (c2, _) = Config::from_toml(&text).unwrap();
+        assert_eq!(c2.ui_style(), UiStyle::Cell);
     }
 }

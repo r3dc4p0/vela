@@ -44,6 +44,12 @@ it can look anywhere in the buffer; when the cursor leaves the screen the
 status bar keeps reporting its line, in amber. `Alt+Click` adds a cursor.
 Disable the lot with `mouse = false`.
 
+**Look** — two drawing styles. The default, `pixel`, draws borders and dividers
+as hairlines on the edge of a cell, so a rule between two bars costs a fraction
+of a row instead of a whole one; `cell` is the older block-glyph chrome, one
+keystroke (`Ctrl+Shift+U`) or `--ui cell` away. Two themes, every colour
+overridable from the configuration file.
+
 **Files** — multiple buffers with tabs; atomic saves (temp file + `fsync` +
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM
 detection; LF/CRLF/CR line endings detected per file and written back unchanged;
@@ -92,6 +98,7 @@ vela --list-keys        # print every command and its bindings
 | Flag | Meaning |
 | --- | --- |
 | `-c`, `--config <FILE>` | Use a specific configuration file |
+| `--ui <pixel\|cell>` | Drawing style: hairline borders or block borders |
 | `--print-config` | Print the effective configuration and exit |
 | `--list-keys` | Print the key bindings and exit |
 | `--smoke` | Start, draw one frame and exit (startup check for CI) |
@@ -152,6 +159,7 @@ word_wrap = false
 
 [ui]
 theme = "vela-dark"        # or "vela-light"
+style = "pixel"            # or "cell" — block borders instead of hairlines
 show_hints = true
 mouse = true
 

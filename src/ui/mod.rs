@@ -5,6 +5,7 @@
 //! except through the documented `scroll` fields of the active buffer, which are
 //! pure view state.
 
+pub mod canvas;
 pub mod chrome;
 pub mod editor;
 pub mod input;
@@ -19,6 +20,7 @@ use ratatui::Frame;
 
 use crate::app::App;
 use crate::commands::Command;
+use crate::config::UiStyle;
 use crate::theme::Theme;
 
 pub use chrome::OverlayKind;
@@ -278,6 +280,11 @@ struct Layout {
     topbar: Option<Rect>,
     tabs: Option<Rect>,
     editor: Rect,
+    /// The hairline between the editing area and the status bar. The pixel
+    /// style spends a row on it — but only the row's top eighth is painted, so
+    /// it reads as the status bar's border plus padding, which is what the
+    /// design gives that bar anyway.
+    rule: Option<Rect>,
     status: Option<Rect>,
     hints: Option<Rect>,
 }
@@ -286,6 +293,7 @@ fn layout(area: Rect, app: &App) -> Layout {
     let want_top = app.config.ui.show_topbar;
     let want_tabs = app.config.ui.show_tabs && app.buffers.len() > 1;
     let want_hints = app.config.ui.show_hints;
+    let want_rule = app.config.ui_style() == UiStyle::Pixel;
 
     // Fixed priority: the editing area always keeps at least one row, then the
     // status bar, then the top bar, then tabs, then hints. Every step is only
@@ -293,11 +301,18 @@ fn layout(area: Rect, app: &App) -> Layout {
     // (which would draw outside the buffer and panic).
     let mut budget = area.height as usize;
     let mut status = 0usize;
+    let mut rule = 0usize;
     let mut top = 0usize;
     let mut tabs = 0usize;
     let mut hints = 0usize;
     if budget >= 2 {
         status = 1;
+        budget -= 1;
+    }
+    // The rule is part of the status bar, not decoration on the editor: without
+    // a status bar to separate from there is nothing for it to sit above.
+    if want_rule && status > 0 && budget >= 2 {
+        rule = 1;
         budget -= 1;
     }
     if want_top && budget >= 2 {
@@ -314,7 +329,7 @@ fn layout(area: Rect, app: &App) -> Layout {
 
     let editor_h = area
         .height
-        .saturating_sub((top + tabs + hints + status) as u16);
+        .saturating_sub((top + tabs + hints + status + rule) as u16);
 
     let mut y = area.y;
     let topbar = if top > 0 {
@@ -333,6 +348,13 @@ fn layout(area: Rect, app: &App) -> Layout {
     };
     let editor = Rect::new(area.x, y, area.width, editor_h);
     y += editor_h;
+    let rule_rect = if rule > 0 {
+        let r = Rect::new(area.x, y, area.width, 1);
+        y += 1;
+        Some(r)
+    } else {
+        None
+    };
     let status_rect = if status > 0 {
         let r = Rect::new(area.x, y, area.width, 1);
         y += 1;
@@ -350,6 +372,7 @@ fn layout(area: Rect, app: &App) -> Layout {
         topbar,
         tabs: tabs_rect,
         editor,
+        rule: rule_rect,
         status: status_rect,
         hints: hints_rect,
     }
@@ -382,6 +405,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_editor(frame, l.editor, app);
 
+    if let Some(r) = l.rule {
+        chrome::draw_rule(frame.buffer_mut(), r, app);
+    }
     if let Some(r) = l.status {
         chrome::draw_status(frame.buffer_mut(), r, app);
     }

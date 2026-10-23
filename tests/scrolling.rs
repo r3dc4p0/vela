@@ -135,15 +135,18 @@ fn the_indicator_uses_its_own_colour() {
     let scratch = Scratch::new();
     let path = scratch.file("long.txt", &numbered(200));
     let mut app = editor(scratch.path());
-    let area = open_fixture(&mut app, &path, 80, 24);
+    let _area = open_fixture(&mut app, &path, 80, 24);
 
     wheel_down(&mut app, 10);
     let buf = cells(&mut app, 80, 24);
 
     // Find the arrow in the status bar and compare it with the "Ln" of the
-    // ordinary position readout a few columns later. The status bar sits
-    // directly below the editor area.
-    let y = area.y + area.height;
+    // ordinary position readout a few columns later. The bar is located by its
+    // content rather than by `area.bottom()`, because the pixel style puts a
+    // hairline row between the editing area and the bar.
+    let y = (0..24)
+        .find(|&y| (0..80).any(|x| buf[(x, y)].symbol() == "↑"))
+        .expect("the indicator is on screen");
     let row: String = (0..80).map(|x| buf[(x, y)].symbol()).collect();
     let arrow_x = row.find('↑').expect("the indicator is on screen") as u16;
     let plain_x = row.rfind("Ln ").expect("the position readout") as u16;

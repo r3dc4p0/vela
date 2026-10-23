@@ -89,6 +89,15 @@ pub struct Theme {
     pub current_match_bg: Color,
 
     pub border: Color,
+    /// Hairlines: the rules between bars and the separators inside them.
+    ///
+    /// Deliberately dimmer than [`Theme::border`], which frames a panel. A
+    /// panel border is a container and should be seen; a rule between two
+    /// surfaces is a seam and should only be inferred.
+    pub line: Color,
+    /// The small marks that say *this one*: the wordmark, the modified dot,
+    /// the active tab's accent.
+    pub mark: Color,
     pub overlay_bg: Color,
     pub overlay_sel_bg: Color,
     pub overlay_sel_fg: Color,
@@ -165,7 +174,7 @@ impl Theme {
 
             tab_active_bg: Color::Rgb(0x14, 0x17, 0x1e),
             tab_active_fg: Color::Rgb(0xe8, 0xec, 0xf4),
-            tab_inactive_bg: Color::Rgb(0x1c, 0x21, 0x2b),
+            tab_inactive_bg: Color::Rgb(0x0f, 0x12, 0x18),
             tab_inactive_fg: Color::Rgb(0x6b, 0x74, 0x86),
 
             statusbar_bg: Color::Rgb(0x1c, 0x21, 0x2b),
@@ -187,6 +196,8 @@ impl Theme {
             current_match_bg: Color::Rgb(0x8a, 0x6d, 0x2c),
 
             border: Color::Rgb(0x33, 0x3a, 0x48),
+            line: Color::Rgb(0x24, 0x2b, 0x36),
+            mark: Color::Rgb(0xc8, 0xa0, 0x5a),
             overlay_bg: Color::Rgb(0x1c, 0x21, 0x2b),
             overlay_sel_bg: Color::Rgb(0x2d, 0x3b, 0x54),
             overlay_sel_fg: Color::Rgb(0xff, 0xff, 0xff),
@@ -236,7 +247,7 @@ impl Theme {
 
             tab_active_bg: Color::Rgb(0xfa, 0xfa, 0xf7),
             tab_active_fg: Color::Rgb(0x1a, 0x1d, 0x22),
-            tab_inactive_bg: Color::Rgb(0xef, 0xef, 0xea),
+            tab_inactive_bg: Color::Rgb(0xe9, 0xe9, 0xe3),
             tab_inactive_fg: Color::Rgb(0x8a, 0x90, 0x9a),
 
             statusbar_bg: Color::Rgb(0xef, 0xef, 0xea),
@@ -258,6 +269,8 @@ impl Theme {
             current_match_bg: Color::Rgb(0xff, 0xd0, 0x54),
 
             border: Color::Rgb(0xd0, 0xd0, 0xc8),
+            line: Color::Rgb(0xdd, 0xdd, 0xd5),
+            mark: Color::Rgb(0x9a, 0x6b, 0x1e),
             overlay_bg: Color::Rgb(0xef, 0xef, 0xea),
             overlay_sel_bg: Color::Rgb(0xd6, 0xe4, 0xf5),
             overlay_sel_fg: Color::Rgb(0x00, 0x00, 0x00),
@@ -350,6 +363,8 @@ impl Theme {
             "match_fg" => self.match_fg = c,
             "current_match_bg" => self.current_match_bg = c,
             "border" => self.border = c,
+            "line" | "rule" | "hairline" => self.line = c,
+            "mark" => self.mark = c,
             "overlay_bg" => self.overlay_bg = c,
             "overlay_sel_bg" => self.overlay_sel_bg = c,
             "overlay_sel_fg" => self.overlay_sel_fg = c,

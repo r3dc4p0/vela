@@ -230,6 +230,61 @@ combining marks zero. Long lines are rendered through a window that starts at th
 first visible character, so opening a 100 MB single-line file does not freeze the
 UI. Lines longer than 8 KiB are clipped rather than scanned to the end.
 
+### The pixel style: a rule is a fraction of a cell
+
+A terminal cell is the atom of a glyph: one symbol, one cell, no half. The
+design this editor is drawn from is a pixel design — 1px borders, hairlines
+between bars — and the first attempt to express it in cells failed for a reason
+worth recording: `─` and `│` are *whole cells* of line. A divider that costs a
+full row reads as a heavy bar, not as a border, so that attempt was reverted
+rather than shipped half-working.
+
+The block-element repertoire is what makes it expressible after all. Four glyphs
+draw a line inside a cell without filling it: `▔` and `▁` (top and bottom
+eighth), `▏` and `▕` (left and right eighth). `ui::canvas` wraps them in a
+surface whose unit is a *dot*: a cell is two dots wide and two dots tall, and a
+dot on the boundary of a cell is a hairline on that edge. A dot in the middle of
+a cell has no glyph, so the canvas quantises it to the nearest edge instead of
+dropping it — a canvas that silently loses half the drawing is worse than one
+that rounds.
+
+Three rules make composition predictable:
+
+* **A fill erases.** `Canvas::fill` resets the cells it covers, so the file
+  underneath a panel never shows through it.
+* **Text wins.** A cell that carries a glyph cannot also carry a hairline, so
+  `Canvas::text` claims its cells and later strokes skip them. That is what lets
+  a panel title interrupt its own top border — a legend cut into the line —
+  instead of being painted over by it.
+* **A stroke is four edges.** `Canvas::stroke` draws the top and bottom rules
+  across the full width and starts the side rules one row in, so the corners
+  belong to the horizontal rule. The seam that leaves at each corner is a single
+  dot; a corner glyph carrying both arms would have to be a quadrant block, which
+  is half a cell thick and would undo the point.
+
+One rule cannot be drawn this way: a hairline under a row that is full of text.
+The dots need the cell the glyph is in. For those the canvas steps aside and the
+row is *underlined* — SGR 4 with SGR 58 for the colour — which paints a line at
+the baseline, under the text, at the cost of neither a row nor a cell. That is
+how the top bar, the tab strip and the status bar get their bottom border.
+Terminals that ignore SGR 58 fall back to the text colour for the underline,
+which is why the row's own foreground is set to the hairline colour before any
+text is written over it.
+
+The tab strip is the case the earlier attempt died on. It is one row, always:
+the active tab is told apart by weight, a lighter background and a hairline of
+accent under it, and the tabs are separated by `▏` in the hairline colour rather
+than by `│`. The design mockup puts a 2px accent bar on *top* of the active tab;
+that cannot translate — the accent would need the cell the label is in — so it
+became an underline, which also reads as the tab opening into the document.
+
+The style is a choice, not a replacement: `ui.style = "cell"` (or `--ui cell`,
+or `Ctrl+Shift+U`) brings back the block-glyph chrome, which is the more legible
+of the two on fonts that render the eighth blocks badly. Both styles share the
+layout, the hit-testing and every word on screen; only `ui::chrome` and
+`ui::canvas` know which one is in use, and `tests/ui_style.rs` asserts that
+everything the UI *says* is identical either way.
+
 ### Mouse hit-testing reads the last frame
 
 Mouse events arrive as screen coordinates, but the mapping from a cell to a
@@ -351,6 +406,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| UI styles | `tests/ui_style.rs`: hairlines where the cell style draws boxes, a title breaking its panel's rule, the one-pixel underline under the bars, the tab strip staying one row, the separator column belonging to its tab, and both styles saying the same words |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |
 | Performance | `benches/core_bench.rs` (Criterion) |
 
