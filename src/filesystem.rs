@@ -22,6 +22,10 @@ use std::time::SystemTime;
 
 use crate::error::{Error, Result};
 
+/// Bytes read per `read` call. Large enough that the syscall overhead vanishes,
+/// small enough that progress moves smoothly on a slow disk.
+const READ_CHUNK: usize = 1024 * 1024;
+
 /// Line ending convention of a document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Eol {
@@ -60,33 +64,7 @@ impl Eol {
 
     /// Detect the dominant convention. Ties resolve to LF.
     pub fn detect(text: &str) -> Self {
-        let bytes = text.as_bytes();
-        let mut crlf = 0usize;
-        let mut lf = 0usize;
-        let mut cr = 0usize;
-        let mut i = 0;
-        while i < bytes.len() {
-            match bytes[i] {
-                b'\r' => {
-                    if bytes.get(i + 1) == Some(&b'\n') {
-                        crlf += 1;
-                        i += 1;
-                    } else {
-                        cr += 1;
-                    }
-                }
-                b'\n' => lf += 1,
-                _ => {}
-            }
-            i += 1;
-        }
-        if crlf >= lf && crlf >= cr && crlf > 0 {
-            Eol::CrLf
-        } else if cr > lf && cr > 0 {
-            Eol::Cr
-        } else {
-            Eol::Lf
-        }
+        EolCounts::of(text).dominant()
     }
 }
 
@@ -125,6 +103,16 @@ pub struct LoadedFile {
 
 /// Read `path` into a [`LoadedFile`].
 pub fn load(path: &Path) -> Result<LoadedFile> {
+    load_with(path, |_| {})
+}
+
+/// Read `path`, reporting how many bytes have arrived so far.
+///
+/// The callback runs on the calling thread — on a worker thread when the file
+/// is large — and exists so the UI can show real progress instead of a frozen
+/// frame. It is called once per chunk, so a 2 GB file costs two thousand calls
+/// rather than two billion.
+pub fn load_with(path: &Path, mut on_bytes: impl FnMut(u64)) -> Result<LoadedFile> {
     let meta = fs::metadata(path).map_err(|e| Error::open(path, e))?;
     if meta.is_dir() {
         return Err(Error::IsDirectory(path.to_path_buf()));
@@ -132,25 +120,53 @@ pub fn load(path: &Path) -> Result<LoadedFile> {
 
     let mut file = File::open(path).map_err(|e| Error::open(path, e))?;
     let mut bytes = Vec::with_capacity(meta.len() as usize);
-    file.read_to_end(&mut bytes)
-        .map_err(|e| Error::open(path, e))?;
+    // One chunk of buffer, no larger than the file it is about to hold: a
+    // twenty-byte file should not allocate a megabyte to be read.
+    let mut chunk = vec![0u8; READ_CHUNK.min((meta.len() as usize).max(1))];
+    loop {
+        let n = file.read(&mut chunk).map_err(|e| Error::open(path, e))?;
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..n]);
+        on_bytes(bytes.len() as u64);
+    }
 
-    let (encoding, bom, body) = detect_encoding(&bytes, path)?;
+    let (encoding, bom) = detect_encoding(&bytes, path)?;
 
+    // The buffer is *moved* into the string, not copied. It used to go through
+    // `body.to_vec()`, which for a 2 GB file allocated another 2 GB and copied
+    // every byte of it — a quarter of the time it takes to open the file, spent
+    // making a duplicate of something that was about to be discarded.
+    let bom_len = if bom {
+        match encoding {
+            Encoding::Utf8 => 3,
+            Encoding::Utf16Le | Encoding::Utf16Be => 2,
+        }
+    } else {
+        0
+    };
     let text = match encoding {
         Encoding::Utf8 => {
-            String::from_utf8(body.to_vec()).map_err(|_| Error::UnsupportedEncoding {
+            bytes.drain(..bom_len);
+            String::from_utf8(bytes).map_err(|_| Error::UnsupportedEncoding {
                 path: path.to_path_buf(),
                 encoding: "invalid UTF-8".to_string(),
             })?
         }
-        Encoding::Utf16Le => decode_utf16(body, true, path)?,
-        Encoding::Utf16Be => decode_utf16(body, false, path)?,
+        Encoding::Utf16Le => decode_utf16(&bytes[bom_len..], true, path)?,
+        Encoding::Utf16Be => decode_utf16(&bytes[bom_len..], false, path)?,
     };
 
-    let eol = Eol::detect(&text);
-    let mixed_eol = has_mixed_eol(&text);
-    let text = normalize_eol(&text);
+    // A file with no carriage return anywhere — the overwhelming majority — has
+    // nothing to detect and nothing to normalise: one `memchr` answers both
+    // questions, and the text is left untouched instead of being copied.
+    let (eol, mixed_eol, text) = if text.contains('\r') {
+        let counts = EolCounts::of(&text);
+        (counts.dominant(), counts.mixed(), normalize_eol(&text))
+    } else {
+        (Eol::Lf, false, text)
+    };
 
     Ok(LoadedFile {
         text,
@@ -163,15 +179,67 @@ pub fn load(path: &Path) -> Result<LoadedFile> {
     })
 }
 
-fn detect_encoding<'a>(bytes: &'a [u8], path: &Path) -> Result<(Encoding, bool, &'a [u8])> {
+/// Counts of each line-ending convention in a text.
+///
+/// The dominant convention and "does this file mix them" are two answers to the
+/// same question, and they used to be asked in three separate passes over the
+/// whole file — one counting, one `replace` that allocated a copy of the file
+/// to ask whether a substring existed, and one to normalise.
+#[derive(Debug, Default, Clone, Copy)]
+struct EolCounts {
+    crlf: usize,
+    lf: usize,
+    cr: usize,
+}
+
+impl EolCounts {
+    fn of(text: &str) -> Self {
+        let bytes = text.as_bytes();
+        let mut counts = Self::default();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\r' => {
+                    if bytes.get(i + 1) == Some(&b'\n') {
+                        counts.crlf += 1;
+                        i += 1;
+                    } else {
+                        counts.cr += 1;
+                    }
+                }
+                b'\n' => counts.lf += 1,
+                _ => {}
+            }
+            i += 1;
+        }
+        counts
+    }
+
+    /// Ties resolve to LF.
+    fn dominant(&self) -> Eol {
+        if self.crlf >= self.lf && self.crlf >= self.cr && self.crlf > 0 {
+            Eol::CrLf
+        } else if self.cr > self.lf && self.cr > 0 {
+            Eol::Cr
+        } else {
+            Eol::Lf
+        }
+    }
+
+    fn mixed(&self) -> bool {
+        self.crlf > 0 && (self.lf > 0 || self.cr > 0)
+    }
+}
+
+fn detect_encoding(bytes: &[u8], path: &Path) -> Result<(Encoding, bool)> {
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        return Ok((Encoding::Utf8, true, &bytes[3..]));
+        return Ok((Encoding::Utf8, true));
     }
     if bytes.starts_with(&[0xFF, 0xFE]) {
-        return Ok((Encoding::Utf16Le, true, &bytes[2..]));
+        return Ok((Encoding::Utf16Le, true));
     }
     if bytes.starts_with(&[0xFE, 0xFF]) {
-        return Ok((Encoding::Utf16Be, true, &bytes[2..]));
+        return Ok((Encoding::Utf16Be, true));
     }
     // No BOM: a NUL byte in the head of the file means binary content. Refusing
     // is safer than opening and re-saving a corrupted file.
@@ -181,7 +249,7 @@ fn detect_encoding<'a>(bytes: &'a [u8], path: &Path) -> Result<(Encoding, bool, 
             path: path.to_path_buf(),
         });
     }
-    Ok((Encoding::Utf8, false, bytes))
+    Ok((Encoding::Utf8, false))
 }
 
 fn decode_utf16(body: &[u8], little_endian: bool, path: &Path) -> Result<String> {
@@ -205,12 +273,6 @@ fn decode_utf16(body: &[u8], little_endian: bool, path: &Path) -> Result<String>
         path: path.to_path_buf(),
         encoding: "invalid UTF-16".to_string(),
     })
-}
-
-fn has_mixed_eol(text: &str) -> bool {
-    let has_crlf = text.contains("\r\n");
-    let without_crlf = text.replace("\r\n", "");
-    has_crlf && (without_crlf.contains('\n') || without_crlf.contains('\r'))
 }
 
 /// Convert CRLF and lone CR to LF.

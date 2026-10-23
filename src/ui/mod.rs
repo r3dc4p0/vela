@@ -8,6 +8,7 @@
 pub mod chrome;
 pub mod editor;
 pub mod input;
+pub mod loading;
 pub mod overlays;
 
 use std::time::Instant;
@@ -391,6 +392,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Notifications float over the bottom of the editing area, never over the
     // status bar or the hint bar: those carry information the user is reading.
     chrome::draw_messages(frame.buffer_mut(), l.editor, app);
+
+    // A file still being opened gets the middle of the editing area, under any
+    // overlay the user has opened since.
+    loading::draw(frame.buffer_mut(), l.editor, app);
 
     if let Some((x, y)) = overlays::draw(frame, app) {
         frame.set_cursor_position((x, y));

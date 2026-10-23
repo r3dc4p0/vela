@@ -417,10 +417,15 @@ pub fn panel(buf: &mut Buffer, area: Rect, title: &str, theme: &Theme) -> Rect {
     buf.set_style(area, Style::default().fg(theme.fg));
 
     // Border: thin box drawing, accent coloured title.
+    //
+    // The top edge is filled with `─` before the title is painted over it. It
+    // used to be built from the title alone, which left the top-right corner
+    // sitting just after the title instead of at the panel's edge — a box whose
+    // lid stops a third of the way across.
     let w = area.width as usize;
     let inner_w = w.saturating_sub(2);
     let mut top = String::from("┌");
-    top.push_str(&fit(&format!(" {title} "), inner_w));
+    top.push_str(&"─".repeat(inner_w));
     top.push('┐');
     buf.set_string(area.x, area.y, &top, Style::default().fg(theme.border));
 

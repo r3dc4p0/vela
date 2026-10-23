@@ -16,6 +16,7 @@ mod prompts;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, KeyEvent, KeyEventKind, KeyModifiers};
@@ -27,7 +28,6 @@ use crate::clipboard::Clipboard;
 use crate::commands::Command;
 use crate::config::Config;
 use crate::editing;
-use crate::filesystem::LoadedFile;
 use crate::input::{self, Action};
 use crate::keymap::Keymap;
 use crate::platform;
@@ -36,13 +36,15 @@ use crate::syntax::StateCache;
 use crate::theme::Theme;
 use crate::ui::{self, Confirm, ConfirmAction, Level, Message, Overlay, PathPrompt, UiState};
 
+pub use files::{Loading, OpenedBuffer, LOADER_DELAY};
+
 /// Work handed to a background thread.
 pub enum Job {
-    /// A file finished loading.
+    /// A file finished loading, with its buffer already built.
     Opened {
         generation: u64,
         path: PathBuf,
-        result: Box<Result<LoadedFile, crate::Error>>,
+        result: Box<Result<OpenedBuffer, crate::Error>>,
     },
     /// The file finder index finished building.
     Index(Vec<String>),
@@ -84,6 +86,12 @@ pub struct App {
     tx: Sender<Job>,
     rx: Receiver<Job>,
     open_generation: u64,
+    /// The open currently in flight, if any.
+    ///
+    /// Held as an `Arc` because the worker writes the byte counter into the
+    /// same allocation the renderer reads it from — there is no second copy to
+    /// keep in step, and no lock on the paint path.
+    pub loading: Option<Arc<Loading>>,
     pub file_index: Option<Vec<String>>,
     pub index_loading: bool,
     /// Set while waiting for the user to confirm quitting.
@@ -191,6 +199,7 @@ impl App {
             tx,
             rx,
             open_generation: 0,
+            loading: None,
             file_index: None,
             index_loading: false,
             quit_pending: false,
@@ -305,8 +314,12 @@ impl App {
             self.poll_jobs();
 
             // Wake up regularly for message expiry and background jobs, but do
-            // not burn CPU when idle.
-            let timeout = if self.ui.messages.is_empty() {
+            // not burn CPU when idle. While a file is opening the timeout also
+            // paces the spinner: at 200 ms it would step four times a second,
+            // which reads as a stutter rather than as motion.
+            let timeout = if self.loading.is_some() {
+                Duration::from_millis(80)
+            } else if self.ui.messages.is_empty() {
                 Duration::from_millis(200)
             } else {
                 Duration::from_millis(50)
@@ -345,10 +358,14 @@ impl App {
                         debug!("discarding stale open result for {}", path.display());
                         continue;
                     }
+                    // The loader belongs to this generation, so it goes away
+                    // whatever the outcome — an error is not a reason to keep
+                    // spinning.
+                    self.loading = None;
                     match *result {
-                        Ok(loaded) => {
+                        Ok(opened) => {
                             let name = path.display().to_string();
-                            self.add_loaded(path, loaded);
+                            self.install(path, opened);
                             self.success(format!("Opened {name}"));
                         }
                         Err(e) => self.error(e.user_message()),

@@ -10,6 +10,9 @@
 //!   the user instead of silently clobbering another process's work.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tracing::{info, warn};
 
@@ -20,6 +23,15 @@ use crate::editing;
 use crate::filesystem::{self, LoadedFile};
 use crate::platform;
 use crate::ui::{Confirm, ConfirmAction, Level, Overlay, PathPrompt};
+
+/// How long an open may take before the loader panel appears.
+///
+/// A five-megabyte file opens in about ten milliseconds, and a panel that
+/// flashes for a single frame is worse than no panel at all — it reads as a
+/// glitch. The status bar still says "Opening …" straight away, so the delay
+/// hides nothing; it only keeps the *panel* off the screen for work that is
+/// over before it could be read.
+pub const LOADER_DELAY: Duration = Duration::from_millis(120);
 
 /// Directories skipped by the file finder.
 const SKIP_DIRS: &[&str] = &[
@@ -41,6 +53,96 @@ const SKIP_DIRS: &[&str] = &[
 
 /// Maximum number of files the finder indexes.
 const INDEX_LIMIT: usize = 50_000;
+
+/// An open that is still in flight.
+///
+/// Shared with the worker thread through an `Arc`: the worker writes the byte
+/// counter, the UI reads it while painting. That is the whole point of the
+/// type — the number on screen is the number of bytes actually on disk, not an
+/// estimate, which is why the bar can claim a percentage at all.
+#[derive(Debug)]
+pub struct Loading {
+    pub path: PathBuf,
+    /// Size from the file's metadata, or 0 when it could not be read.
+    pub total: u64,
+    started: Instant,
+    done: AtomicU64,
+    preparing: AtomicBool,
+}
+
+impl Loading {
+    pub fn new(path: PathBuf, total: u64) -> Self {
+        Self {
+            path,
+            total,
+            started: Instant::now(),
+            done: AtomicU64::new(0),
+            preparing: AtomicBool::new(false),
+        }
+    }
+
+    /// File name without its directory, for the panel.
+    pub fn name(&self) -> String {
+        self.path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.path.display().to_string())
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.started.elapsed()
+    }
+
+    /// True once the file is read and the buffer is being built.
+    pub fn preparing(&self) -> bool {
+        self.preparing.load(Ordering::Relaxed)
+    }
+
+    pub fn done(&self) -> u64 {
+        self.done.load(Ordering::Relaxed)
+    }
+
+    /// Read fraction in `0.0..=1.0`, or `None` when the size is unknown.
+    pub fn fraction(&self) -> Option<f32> {
+        if self.total == 0 {
+            return None;
+        }
+        Some((self.done() as f64 / self.total as f64).clamp(0.0, 1.0) as f32)
+    }
+
+    /// Called by the worker, once per chunk read.
+    pub fn set_done(&self, bytes: u64) {
+        self.done.store(bytes, Ordering::Relaxed);
+    }
+
+    /// Called by the worker when reading is over and the buffer is being built.
+    pub fn start_preparing(&self) {
+        self.preparing.store(true, Ordering::Relaxed);
+    }
+}
+
+/// A file that finished loading, with its buffer already built.
+///
+/// The rope is constructed on the worker rather than on the UI thread: for a
+/// two-gigabyte file that is 0.7 s, and doing it on the UI thread would freeze
+/// the very frame the loader exists to cover.
+pub struct OpenedBuffer {
+    pub document: Document,
+    pub mixed_eol: bool,
+}
+
+/// Turn a freshly loaded file into a document, ready to install.
+fn build_document(path: &Path, loaded: LoadedFile) -> OpenedBuffer {
+    let mut doc = Document::from_text(&loaded.text, Some(path.to_path_buf()));
+    doc.set_eol(loaded.eol);
+    doc.set_encoding(loaded.encoding, loaded.bom);
+    doc.set_disk_meta(loaded.mtime, Some(loaded.len));
+    doc.mark_saved();
+    OpenedBuffer {
+        document: doc,
+        mixed_eol: loaded.mixed_eol,
+    }
+}
 
 impl App {
     // ------------------------------------------------------------- opening
@@ -68,14 +170,21 @@ impl App {
             let generation = self.open_generation;
             let tx = self.tx.clone();
             let worker_path = path.clone();
+            let loading = Arc::new(Loading::new(path.clone(), size));
+            let progress = Arc::clone(&loading);
             std::thread::spawn(move || {
-                let result = filesystem::load(&worker_path);
+                let result =
+                    filesystem::load_with(&worker_path, |n| progress.set_done(n)).map(|loaded| {
+                        progress.start_preparing();
+                        build_document(&worker_path, loaded)
+                    });
                 let _ = tx.send(Job::Opened {
                     generation,
                     path: worker_path,
                     result: Box::new(result),
                 });
             });
+            self.loading = Some(loading);
             self.info(format!(
                 "Opening {} ({:.1} MiB)…",
                 path.display(),
@@ -87,7 +196,8 @@ impl App {
         match filesystem::load(&path) {
             Ok(loaded) => {
                 let name = path.display().to_string();
-                self.add_loaded(path, loaded);
+                let opened = build_document(&path, loaded);
+                self.install(path, opened);
                 self.success(format!("Opened {name}"));
             }
             // `vela notes.md` on a file that does not exist yet: open an empty
@@ -114,14 +224,12 @@ impl App {
         }
     }
 
-    /// Insert a freshly loaded file as a new buffer.
-    pub(crate) fn add_loaded(&mut self, path: PathBuf, loaded: LoadedFile) {
-        let mut doc = Document::from_text(&loaded.text, Some(path.clone()));
-        doc.set_eol(loaded.eol);
-        doc.set_encoding(loaded.encoding, loaded.bom);
-        doc.set_disk_meta(loaded.mtime, Some(loaded.len));
-        doc.mark_saved();
-
+    /// Put an already-built buffer in place.
+    ///
+    /// Split from [`build_document`] so the worker can hand over a finished
+    /// document: everything expensive has happened by the time this runs, and
+    /// all that is left is a `Vec` push.
+    pub(crate) fn install(&mut self, path: PathBuf, opened: OpenedBuffer) {
         // Replace a pristine untitled buffer rather than leaving a blank tab.
         let replace_blank = self.buffers.len() == 1
             && self.buffers[0].path().is_none()
@@ -131,16 +239,16 @@ impl App {
             self.buffers.clear();
         }
 
-        self.buffers.push(doc);
+        self.buffers.push(opened.document);
         self.active = self.buffers.len() - 1;
         self.add_recent(&path);
         self.search.clear();
 
-        if loaded.mixed_eol {
+        if opened.mixed_eol {
             self.warn(format!(
                 "{} had mixed line endings; normalised to {}",
                 path.display(),
-                loaded.eol.label()
+                self.buffers[self.active].eol().label()
             ));
         }
     }

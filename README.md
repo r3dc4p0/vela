@@ -48,7 +48,9 @@ Disable the lot with `mouse = false`.
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM
 detection; LF/CRLF/CR line endings detected per file and written back unchanged;
 binary files refused rather than corrupted; external-modification detection;
-recent files; session restore.
+recent files; session restore. Big files open on a worker thread behind a
+progress panel that counts the bytes actually read, so the window keeps painting
+while a two-gigabyte file loads.
 
 **Search** — incremental search with case, whole-word and regex toggles;
 find & replace including replace-all as a single undo step; match counter;

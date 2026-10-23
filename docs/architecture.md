@@ -185,6 +185,43 @@ the text that was pointed at. For the same reason the search is anchored on the
 a match reads as "past it", so opening find on a selected match would otherwise
 step straight to the following occurrence.
 
+### Opening a large file
+
+A file over 4 MiB is read on a worker thread, and the panel that appears after
+120 ms is the difference between "working" and "hung": two gigabytes take about
+1.2 s, and nothing on screen changing for 1.2 s reads as a freeze.
+
+Three rules make it honest and cheap.
+
+**The UI thread only pushes a `Vec`.** The worker reads, decodes, normalises and
+builds the rope, then sends a finished `Document` through the job channel;
+`App::install` puts it in place. Building the rope on the UI thread instead —
+which is what used to happen — cost 0.7 s of frozen window on a 2 GB file, in
+the very frame the loader was meant to be covering.
+
+**The percentage is measured, not modelled.** `filesystem::load_with` reports
+bytes as the read loop runs, and the count is published through an
+`Arc<AtomicU64>` shared with the renderer, so painting costs one relaxed load
+and no lock. The bar therefore means "this much of the file is in memory".
+
+**A phase that cannot be measured says so.** Turning text into a rope reports
+nothing, so the bar stops showing a percentage and sweeps instead. A bar that
+reaches 100% and then waits is worse than one that admits it has finished
+measuring, because 100% is a claim about completion.
+
+The delay matters as much as the panel: a 5 MiB file opens in ten milliseconds,
+and a panel that flashes for one frame reads as a glitch. The status bar says
+"Opening …" immediately, so nothing is hidden while the panel waits.
+
+Two passes over the whole file were removed along the way, because they were
+most of the load time: the text is *moved* into a `String` instead of copied
+(`body.to_vec()` allocated another 2 GB), and a file with no carriage return
+skips line-ending detection and normalisation entirely — one `memchr` answers
+both questions, where the old code scanned the file three times and allocated a
+copy to ask whether `\r\n` appeared alongside a bare `\n`. Together with the
+rope build moving off the UI thread, opening `/tmp/vela-big.txt` (2 GB) went
+from 6.7 s to 1.2 s, with the longest frame during the load at 0.44 ms.
+
 ### Display-width-correct rendering
 
 The renderer works in terminal columns, not characters: tabs expand to the next
@@ -311,6 +348,7 @@ would dominate the startup budget.
 | Scrolling | `tests/scrolling.rs`: the wheel detaching the view from the cursor, the off-screen indicator and its colour, re-attaching on motion and on typing, page clamping |
 | Word wrap | `tests/word_wrap.rs`: painting across rows, one line number per line, the toggle and its binding, the view following the caret down a tall line, row-based wheel steps, and click/drag through a wrap boundary |
 | Large searches | `tests/search_large.rs`: a document with more matches than the live scan collects — committing finds the rest, `next` reaches the last match before wrapping, `prev` wraps to the true last one, and Replace All does not stop at the cap |
+| Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |
