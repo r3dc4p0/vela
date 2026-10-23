@@ -46,6 +46,12 @@ pub enum Job {
     },
     /// The file finder index finished building.
     Index(Vec<String>),
+    /// A committed search finished scanning the whole document.
+    Searched {
+        generation: u64,
+        revision: u64,
+        result: Result<Vec<std::ops::Range<usize>>, crate::Error>,
+    },
 }
 
 /// Cached bracket pair for the active buffer: (buffer id, revision, cursor,
@@ -354,6 +360,36 @@ impl App {
                     self.file_index = Some(files);
                     debug!("file index built: {n} entries");
                     self.refresh_palette();
+                }
+                Job::Searched {
+                    generation,
+                    revision,
+                    result,
+                } => {
+                    // Discard when the text or the query moved on while the
+                    // scan ran: installing it would highlight stale positions.
+                    let current = self.active_doc().map(|d| d.revision());
+                    if current != Some(revision) {
+                        debug!("discarding stale search result");
+                        self.search.abandon(generation);
+                        continue;
+                    }
+                    let cursor = self.active_doc().map(|d| d.cursor()).unwrap_or(0);
+                    match result {
+                        Ok(ranges) => {
+                            let truncated = ranges.len() >= crate::search::FULL_MATCHES;
+                            if !self.search.install(ranges, truncated, generation, cursor) {
+                                debug!("discarding superseded search result");
+                            }
+                        }
+                        // The live scan already validated the pattern, so this is
+                        // only reachable if the regex engine failed twice. Leave
+                        // the results on screen and stop advertising a scan.
+                        Err(e) => {
+                            debug!("committed search failed: {e}");
+                            self.search.abandon(generation);
+                        }
+                    }
                 }
             }
         }

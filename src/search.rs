@@ -8,8 +8,11 @@
 //! Responsiveness strategy:
 //!
 //! * the query is only re-evaluated when it changes, not on every frame;
-//! * results are capped ([`MAX_MATCHES`]) so a query like `e` in a 100 MiB file
-//!   cannot blow up memory or time;
+//! * while the query is being typed, results are capped at [`LIVE_MATCHES`], a
+//!   *latency* budget: a scan runs on every keystroke, so it has to finish in
+//!   milliseconds even in a multi-gigabyte file;
+//! * once the search is committed, the list is completed to [`FULL_MATCHES`], a
+//!   *memory* budget, on a worker thread so the editor keeps painting;
 //! * next/previous navigation reuses the cached match list instead of
 //!   rescanning.
 
@@ -17,11 +20,24 @@ use std::ops::Range;
 
 use regex::RegexBuilder;
 
-use crate::buffer::{Document, TextStorage};
+use crate::buffer::{Document, Snapshot, TextStorage};
 use crate::error::{Error, Result};
 
-/// Upper bound on collected matches.
-pub const MAX_MATCHES: usize = 20_000;
+/// Matches collected while the query is still being typed.
+///
+/// This is a latency budget, not a memory one. A three-letter word that occurs
+/// three million times in a 2 GB file reaches 20 000 hits in ~11 ms, which is
+/// below the point where typing feels sticky; scanning the whole file would
+/// take 1.7 s *per keystroke*.
+pub const LIVE_MATCHES: usize = 20_000;
+
+/// Matches collected once the search is committed (Enter, F3, Replace All).
+///
+/// This is a memory budget: a hit is a `Range<usize>`, so four million hits is
+/// about 64 MB. It is high enough that real queries are complete — `let` in a
+/// 2 GB file is 3.3 M hits — while a pathological one (`e` in the same file is
+/// some 200 M) still stops instead of exhausting memory.
+pub const FULL_MATCHES: usize = 4_000_000;
 
 /// A search query.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -76,7 +92,11 @@ impl MatchSet {
     }
 
     /// Human readable counter for the status bar.
-    pub fn counter(&self) -> String {
+    ///
+    /// `searching` says a full scan is still running, which is the only reason
+    /// a truncated count can be trusted to change on its own — the trailing
+    /// ellipsis is what stops "20000+" from reading as a final answer.
+    pub fn counter(&self, searching: bool) -> String {
         if let Some(err) = &self.error {
             return err.clone();
         }
@@ -84,11 +104,52 @@ impl MatchSet {
             return "no matches".to_string();
         }
         let pos = self.current.map(|i| i + 1).unwrap_or(0);
-        if self.truncated {
-            format!("{pos} of {}+", self.ranges.len())
-        } else {
-            format!("{pos} of {}", self.ranges.len())
+        match (self.truncated, searching) {
+            (true, true) => format!("{pos} of {}+ …", self.ranges.len()),
+            (true, false) => format!("{pos} of {}+", self.ranges.len()),
+            (false, _) => format!("{pos} of {}", self.ranges.len()),
         }
+    }
+}
+
+/// The three things search needs from a document, over either a live buffer or
+/// a frozen [`Snapshot`].
+///
+/// A snapshot exists so a committed search can run on a worker thread without
+/// blocking the editor; it offers the same scans but not the editing half of
+/// [`TextStorage`], hence this smaller trait rather than a second copy of
+/// [`find_all`].
+trait Source {
+    fn find_literal(&self, needle: &str, case_sensitive: bool, limit: usize) -> Vec<usize>;
+    fn char_at(&self, idx: usize) -> Option<char>;
+    fn to_text(&self) -> String;
+}
+
+struct Live<'a>(&'a dyn TextStorage);
+
+impl Source for Live<'_> {
+    fn find_literal(&self, needle: &str, case_sensitive: bool, limit: usize) -> Vec<usize> {
+        self.0.find_literal(needle, case_sensitive, limit)
+    }
+    fn char_at(&self, idx: usize) -> Option<char> {
+        self.0.char_at(idx)
+    }
+    fn to_text(&self) -> String {
+        self.0.as_string()
+    }
+}
+
+struct Frozen<'a>(&'a Snapshot);
+
+impl Source for Frozen<'_> {
+    fn find_literal(&self, needle: &str, case_sensitive: bool, limit: usize) -> Vec<usize> {
+        self.0.find_literal(needle, case_sensitive, limit)
+    }
+    fn char_at(&self, idx: usize) -> Option<char> {
+        self.0.char_at(idx)
+    }
+    fn to_text(&self) -> String {
+        self.0.to_string_lossy()
     }
 }
 
@@ -98,14 +159,36 @@ pub fn find_all(
     query: &Query,
     limit: usize,
 ) -> Result<Vec<Range<usize>>> {
+    find_in(&Live(storage), query, limit)
+}
+
+/// Find every match of `query` in a frozen snapshot.
+///
+/// Used by the committed-search worker, which cannot borrow the document.
+pub fn find_all_in_snapshot(
+    snapshot: &Snapshot,
+    query: &Query,
+    limit: usize,
+) -> Result<Vec<Range<usize>>> {
+    find_in(&Frozen(snapshot), query, limit)
+}
+
+fn find_in(source: &dyn Source, query: &Query, limit: usize) -> Result<Vec<Range<usize>>> {
     if query.is_empty() {
         return Ok(Vec::new());
     }
     let ranges = if query.regex {
-        find_regex(storage, query, limit)?
+        find_regex(source, query, limit)?
     } else {
-        let starts =
-            storage.find_literal(&query.text, query.case_sensitive, limit.saturating_mul(4));
+        // Whole-word filtering throws some hits away after the scan, so the
+        // scan has to overshoot to still fill `limit`. Without the filter the
+        // overshoot is pure waste: it quadrupled the cost of every keystroke.
+        let scan_limit = if query.whole_word {
+            limit.saturating_mul(4)
+        } else {
+            limit
+        };
+        let starts = source.find_literal(&query.text, query.case_sensitive, scan_limit);
         let len = query.text.chars().count();
         starts.into_iter().map(|s| s..s + len).take(limit).collect()
     };
@@ -115,20 +198,20 @@ pub fn find_all(
     }
     Ok(ranges
         .into_iter()
-        .filter(|r| is_whole_word(storage, r))
+        .filter(|r| is_whole_word(source, r))
         .collect())
 }
 
-fn is_whole_word(storage: &dyn TextStorage, range: &Range<usize>) -> bool {
+fn is_whole_word(source: &dyn Source, range: &Range<usize>) -> bool {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     if range.start > 0 {
-        if let Some(prev) = storage.char_at(range.start - 1) {
+        if let Some(prev) = source.char_at(range.start - 1) {
             if is_word(prev) {
                 return false;
             }
         }
     }
-    if let Some(next) = storage.char_at(range.end) {
+    if let Some(next) = source.char_at(range.end) {
         if is_word(next) {
             return false;
         }
@@ -136,14 +219,14 @@ fn is_whole_word(storage: &dyn TextStorage, range: &Range<usize>) -> bool {
     true
 }
 
-fn find_regex(storage: &dyn TextStorage, query: &Query, limit: usize) -> Result<Vec<Range<usize>>> {
+fn find_regex(source: &dyn Source, query: &Query, limit: usize) -> Result<Vec<Range<usize>>> {
     let re = RegexBuilder::new(&query.text)
         .case_insensitive(!query.case_sensitive)
         .multi_line(true)
         .build()
         .map_err(|e| Error::Regex(first_line(&e.to_string())))?;
 
-    let text = storage.as_string();
+    let text = source.to_text();
     // Byte offsets from `regex` must become character offsets. One pass over the
     // string keeps this linear even for thousands of matches.
     let mut out = Vec::new();
@@ -265,6 +348,18 @@ pub struct SearchState {
     /// creep forward while typing. Anchoring on the origin keeps the highlight
     /// stable until the user navigates explicitly.
     pub origin: usize,
+    /// Bumped by every rescan. A committed scan is tagged with the generation
+    /// it started from, so a result that arrives after the query or the text
+    /// moved on is discarded rather than installed.
+    generation: u64,
+    /// A committed (full) scan is running on a worker thread.
+    searching: bool,
+    /// The current query has already been scanned with the full budget.
+    ///
+    /// Distinct from `truncated`: a query that matches more than
+    /// [`FULL_MATCHES`] stays truncated after the committed scan, and without
+    /// this flag every subsequent `next` would start that scan again.
+    completed: bool,
 }
 
 impl SearchState {
@@ -289,19 +384,28 @@ impl SearchState {
         true
     }
 
-    /// Force a rescan.
+    /// Force a rescan with the live (typing) budget.
     pub fn rescan(&mut self, doc: &Document) {
+        self.rescan_with(doc, LIVE_MATCHES);
+    }
+
+    /// Force a rescan with an explicit match budget.
+    pub fn rescan_with(&mut self, doc: &Document, limit: usize) {
         self.scanned_revision = doc.revision();
         self.scanned_query = self.query.clone();
+        self.generation += 1;
+        self.searching = false;
+        // A scan that already spent the full budget does not need doing twice.
+        self.completed = limit >= FULL_MATCHES;
 
         if self.query.is_empty() {
             self.matches = MatchSet::default();
             return;
         }
 
-        match find_all(doc.storage(), &self.query, MAX_MATCHES) {
+        match find_all(doc.storage(), &self.query, limit) {
             Ok(ranges) => {
-                let truncated = ranges.len() >= MAX_MATCHES;
+                let truncated = ranges.len() >= limit;
                 self.matches = MatchSet {
                     ranges,
                     current: None,
@@ -321,6 +425,95 @@ impl SearchState {
         }
     }
 
+    /// Generation to tag a committed scan with, or `None` when one is already
+    /// running, when the query has already had its full scan, or when there is
+    /// nothing left to find.
+    pub fn start_complete(&mut self) -> Option<u64> {
+        if !self.matches.truncated || self.searching || self.completed || self.query.is_empty() {
+            return None;
+        }
+        self.searching = true;
+        Some(self.generation)
+    }
+
+    /// Install the result of a committed scan.
+    ///
+    /// Returns `false` when the result is stale. The focused match is preserved
+    /// by identity: the full list is a superset of the truncated one in the same
+    /// order, so the highlight does not jump when the count grows.
+    pub fn install(
+        &mut self,
+        ranges: Vec<Range<usize>>,
+        truncated: bool,
+        generation: u64,
+        cursor: usize,
+    ) -> bool {
+        if generation != self.generation {
+            return false;
+        }
+        let focused = self.current();
+        self.matches = MatchSet {
+            ranges,
+            current: None,
+            truncated,
+            error: None,
+        };
+        self.matches.current = focused
+            .and_then(|r| self.matches.ranges.iter().position(|x| *x == r))
+            .or_else(|| {
+                self.select_nearest(cursor);
+                self.matches.current
+            });
+        self.searching = false;
+        self.completed = true;
+        true
+    }
+
+    /// True while a committed scan is running.
+    pub fn searching(&self) -> bool {
+        self.searching
+    }
+
+    /// Forget a committed scan whose result is being thrown away.
+    ///
+    /// Without this the "still searching" marker would outlive the job it
+    /// describes, because nothing else knows the job is gone.
+    pub fn abandon(&mut self, generation: u64) {
+        if generation == self.generation {
+            self.searching = false;
+        }
+    }
+
+    /// Counter text for the status bar and the find bar.
+    pub fn counter(&self) -> String {
+        self.matches.counter(self.searching)
+    }
+
+    /// True when `pos` is inside the focused match, end included.
+    ///
+    /// The end counts because selecting a match leaves the caret *after* it, and
+    /// that caret is what says "I am still on this match".
+    pub fn focus_covers(&self, pos: usize) -> bool {
+        self.current()
+            .is_some_and(|r| r.start <= pos && pos <= r.end)
+    }
+
+    /// True when the focused match is the last one the live scan found.
+    ///
+    /// Wrapping from here would jump back to the top of the file and hide the
+    /// tail, which is exactly the bug this whole mechanism exists to fix — so
+    /// while the rest of the document is still being scanned, `find_next` waits
+    /// instead of wrapping.
+    pub fn at_scan_end(&self) -> bool {
+        self.matches.truncated
+            && self.matches.current == Some(self.matches.ranges.len().saturating_sub(1))
+    }
+
+    /// The mirror of [`Self::at_scan_end`] for backwards navigation.
+    pub fn at_scan_start(&self) -> bool {
+        self.matches.truncated && self.matches.current == Some(0)
+    }
+
     /// Focus the first match at or after `cursor`, wrapping around.
     pub fn select_nearest(&mut self, cursor: usize) {
         if self.matches.ranges.is_empty() {
@@ -334,6 +527,35 @@ impl SearchState {
             .position(|r| r.start >= cursor)
             .unwrap_or(0);
         self.matches.current = Some(idx);
+    }
+
+    /// Point the focus at the match the cursor is standing *before* (or after,
+    /// going backwards), so the following step lands on the match nearest the
+    /// cursor rather than on whatever was focused last.
+    ///
+    /// `current` is the match the cursor is on, and stepping happens from
+    /// there, so this deliberately selects the neighbour and not the match the
+    /// cursor is already at. `None` means "before the first match", which
+    /// [`Self::next_match`] turns into index 0.
+    pub fn anchor_for(&mut self, cursor: usize, forward: bool) {
+        if self.matches.ranges.is_empty() {
+            self.matches.current = None;
+            return;
+        }
+        let len = self.matches.ranges.len();
+        self.matches.current = if forward {
+            match self.matches.ranges.iter().position(|r| r.start >= cursor) {
+                Some(0) => None,
+                Some(i) => Some(i - 1),
+                // Past the last match: wrap to the first on the next step.
+                None => Some(len - 1),
+            }
+        } else {
+            match self.matches.ranges.iter().position(|r| r.end > cursor) {
+                Some(i) => Some(i),
+                None => Some(0),
+            }
+        };
     }
 
     /// Advance to the next match, wrapping.
@@ -370,6 +592,10 @@ impl SearchState {
         self.scanned_query = Query::default();
         self.scanned_revision = 0;
         self.origin = 0;
+        // Invalidate any committed scan still in flight.
+        self.generation += 1;
+        self.searching = false;
+        self.completed = false;
     }
 
     /// Current match range, if any.
@@ -504,6 +730,107 @@ mod tests {
         d.insert_text(" abc");
         assert!(s.refresh(&d));
         assert_eq!(s.matches.len(), 2);
+    }
+
+    #[test]
+    fn completing_a_truncated_scan_keeps_the_focused_match() {
+        let d = doc(&"a ".repeat(100));
+        let mut s = SearchState::new();
+        s.query = Query::literal("a");
+        s.active = true;
+        s.rescan_with(&d, 10);
+        assert_eq!(s.matches.len(), 10);
+        assert!(s.matches.truncated);
+        s.matches.current = Some(3);
+
+        let generation = s
+            .start_complete()
+            .expect("a truncated scan can be completed");
+        let full = find_all(d.storage(), &s.query, FULL_MATCHES).unwrap();
+        assert_eq!(full.len(), 100);
+        assert!(s.install(full, false, generation, d.cursor()));
+
+        assert_eq!(s.matches.len(), 100, "the tail is now in the list");
+        assert!(!s.matches.truncated);
+        assert_eq!(s.matches.current, Some(3), "the highlight does not move");
+        assert!(!s.searching(), "and the scan is no longer advertised");
+    }
+
+    #[test]
+    fn a_scan_that_arrives_after_the_query_moved_on_is_dropped() {
+        let d = doc(&"a ".repeat(100));
+        let mut s = SearchState::new();
+        s.query = Query::literal("a");
+        s.active = true;
+        s.rescan_with(&d, 10);
+        let stale = s.start_complete().expect("truncated");
+
+        // Typing again invalidates the scan that is already running.
+        s.query = Query::literal("a ");
+        s.rescan_with(&d, 10);
+
+        let later = find_all(d.storage(), &s.query, FULL_MATCHES).unwrap();
+        assert!(!s.install(later, false, stale, 0));
+        assert_eq!(s.matches.len(), 10, "the live results survive");
+    }
+
+    #[test]
+    fn the_counter_marks_a_scan_that_is_still_running() {
+        let d = doc(&"a ".repeat(100));
+        let mut s = SearchState::new();
+        s.query = Query::literal("a");
+        s.active = true;
+        s.rescan_with(&d, 10);
+        s.matches.current = Some(0);
+
+        assert_eq!(s.counter(), "1 of 10+");
+        s.start_complete();
+        assert_eq!(s.counter(), "1 of 10+ …", "still counting");
+    }
+
+    #[test]
+    fn anchoring_puts_next_on_the_match_after_the_cursor() {
+        let mut s = SearchState::new();
+        s.matches.ranges = vec![0..3, 8..11, 16..19];
+        s.matches.current = Some(0);
+
+        s.anchor_for(8, true);
+        assert_eq!(s.next_match(), Some(8..11), "the cursor is on this match");
+
+        s.anchor_for(0, true);
+        assert_eq!(s.next_match(), Some(0..3), "before the first match");
+
+        s.anchor_for(99, true);
+        assert_eq!(s.next_match(), Some(0..3), "past the last one, wraps");
+
+        s.anchor_for(8, false);
+        assert_eq!(s.prev_match(), Some(0..3), "backwards, the match before");
+    }
+
+    #[test]
+    fn a_committed_scan_runs_once_per_query() {
+        let d = doc(&"a ".repeat(100));
+        let mut s = SearchState::new();
+        s.query = Query::literal("a");
+        s.active = true;
+        s.rescan_with(&d, 10);
+
+        let generation = s.start_complete().expect("truncated");
+        assert!(s.start_complete().is_none(), "one scan at a time");
+
+        // Pretend even the full budget ran out: the list is still truncated, so
+        // without a separate flag every later `next` would scan the file again.
+        let full = find_all(d.storage(), &s.query, FULL_MATCHES).unwrap();
+        assert!(s.install(full, true, generation, 0));
+        assert!(
+            s.start_complete().is_none(),
+            "the same query is not rescanned after its committed scan"
+        );
+
+        // A new query earns a new scan.
+        s.query = Query::literal("a ");
+        s.rescan_with(&d, 10);
+        assert!(s.start_complete().is_some());
     }
 
     #[test]

@@ -273,7 +273,7 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
     let mut spans: Vec<(String, Color)> = Vec::new();
     if app.search.active && !app.search.query.is_empty() {
         spans.push((
-            format!("{}   ", app.search.matches.counter()),
+            format!("{}   ", app.search.counter()),
             theme.statusbar_accent,
         ));
     }

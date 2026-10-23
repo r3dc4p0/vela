@@ -24,7 +24,7 @@ use super::chrome::{centered, draw_field, fit, panel, wipe};
 pub fn draw(frame: &mut Frame, app: &mut App) -> Option<(u16, u16)> {
     let area = frame.area();
     let theme = app.theme.clone();
-    let counter = app.search.matches.counter();
+    let counter = app.search.counter();
     let overlay = std::mem::replace(&mut app.ui.overlay, Overlay::None);
     let buf = frame.buffer_mut();
 

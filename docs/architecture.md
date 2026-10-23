@@ -154,8 +154,27 @@ same pass, so the result is a `Vec<Range<usize>>` of *char* indices without a
 second scan. Case-insensitive search uses a Unicode-aware fallback window
 because folding changes byte lengths.
 
-The result set is capped (`MAX_MATCHES = 20_000`) and flagged as truncated, so a
-query that matches everything cannot exhaust memory.
+The result set has two budgets, because the scan runs at two different tempos.
+
+While the query is being typed it is re-scanned on every keystroke, so the cap
+is a *latency* budget: `LIVE_MATCHES = 20_000` is reached in ~11 ms even for a
+three-letter word that occurs three million times in a 2 GB file. Scanning that
+file whole would take 1.7 s, per keystroke, which is not a budget at all.
+
+When the search is committed — Enter, `F3`, Replace All — the rest of the file
+is worth having, and the cap becomes a *memory* budget instead:
+`FULL_MATCHES = 4_000_000`, about 64 MB of offsets. That scan takes about a
+second on 2 GB, so it runs on a worker thread against a `Snapshot` of the rope
+and arrives through the same job channel as a background file open. Results are
+tagged with the generation and revision they were computed from; a result that
+arrives after the query or the text moved on is dropped rather than installed.
+
+Two consequences are deliberate. The focused match is preserved *by identity*
+across the install — the full list is a superset of the truncated one in the
+same order, so the highlight does not jump when the count grows. And while the
+tail is still being found, `next` at the end of the live list reports "searching"
+instead of wrapping: wrapping there is precisely the bug the split exists to fix,
+because it silently hides everything past the cap.
 
 ### Display-width-correct rendering
 
@@ -282,6 +301,7 @@ would dominate the startup budget.
 | Mouse | `tests/mouse.rs`: click, drag and direction, edge autoscroll, multi-click, wheel, tab clicks — coordinates derived from the published layout |
 | Scrolling | `tests/scrolling.rs`: the wheel detaching the view from the cursor, the off-screen indicator and its colour, re-attaching on motion and on typing, page clamping |
 | Word wrap | `tests/word_wrap.rs`: painting across rows, one line number per line, the toggle and its binding, the view following the caret down a tall line, row-based wheel steps, and click/drag through a wrap boundary |
+| Large searches | `tests/search_large.rs`: a document with more matches than the live scan collects — committing finds the rest, `next` reaches the last match before wrapping, `prev` wraps to the true last one, and Replace All does not stop at the cap |
 | Workflows | `tests/workflow.rs`: buffers, search, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |

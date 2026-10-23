@@ -209,6 +209,54 @@ impl App {
 
     // ------------------------------------------------------- search actions
 
+    /// Finish a truncated search in the background.
+    ///
+    /// Typing is capped at [`search::LIVE_MATCHES`] because the scan runs on
+    /// every keystroke; the cap is low enough that a 2 GB file still answers in
+    /// milliseconds, and high enough that most searches never reach it. Once
+    /// the user commits — Enter, `F3`, Replace All — the rest of the file is
+    /// worth having, but scanning it takes about a second on 2 GB, so it runs on
+    /// a worker instead of freezing the editor.
+    pub(crate) fn complete_search(&mut self) {
+        let Some(generation) = self.search.start_complete() else {
+            return;
+        };
+        let Some(idx) = self.active_index() else {
+            return;
+        };
+        let doc = &self.buffers[idx];
+        let revision = doc.revision();
+        let Some(snapshot) = doc.storage().snapshot() else {
+            // A backend that cannot snapshot has nothing expensive to scan.
+            self.search
+                .rescan_with(&self.buffers[idx], search::FULL_MATCHES);
+            return;
+        };
+        let query = self.search.query.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let result = search::find_all_in_snapshot(&snapshot, &query, search::FULL_MATCHES);
+            let _ = tx.send(super::Job::Searched {
+                generation,
+                revision,
+                result,
+            });
+        });
+    }
+
+    /// Re-anchor the focus on the cursor when the two have drifted apart.
+    ///
+    /// `F3` after clicking elsewhere in the file should continue from the
+    /// cursor, not from wherever the previous match happened to be.
+    fn anchor_search_on_cursor(&mut self, forward: bool) {
+        let Some(cursor) = self.active_doc().map(|d| d.cursor()) else {
+            return;
+        };
+        if !self.search.focus_covers(cursor) {
+            self.search.anchor_for(cursor, forward);
+        }
+    }
+
     pub fn find_next(&mut self) {
         if self.search.query.is_empty() {
             self.open_find(false);
@@ -217,6 +265,12 @@ impl App {
         self.search.active = true;
         if let Some(idx) = self.active_index() {
             self.search.refresh(&self.buffers[idx]);
+        }
+        self.complete_search();
+        self.anchor_search_on_cursor(true);
+        if self.search.searching() && self.search.at_scan_end() {
+            self.info("Searching the rest of the file…");
+            return;
         }
         if let Some(range) = self.search.next_match() {
             if let Some(doc) = self.active_doc_mut() {
@@ -236,6 +290,12 @@ impl App {
         self.search.active = true;
         if let Some(idx) = self.active_index() {
             self.search.refresh(&self.buffers[idx]);
+        }
+        self.complete_search();
+        self.anchor_search_on_cursor(false);
+        if self.search.searching() && self.search.at_scan_start() {
+            self.info("Searching the rest of the file…");
+            return;
         }
         if let Some(range) = self.search.prev_match() {
             if let Some(doc) = self.active_doc_mut() {
@@ -294,6 +354,14 @@ impl App {
         let Some(idx) = self.active_index() else {
             return;
         };
+        // Replacing the truncated prefix and reporting its length would be a
+        // silent partial edit, so finish the scan first. This is the one place
+        // a blocking scan is acceptable: applying millions of edits blocks
+        // anyway, and a wrong answer here corrupts the file.
+        if self.search.matches.truncated {
+            self.search
+                .rescan_with(&self.buffers[idx], search::FULL_MATCHES);
+        }
         if self.search.ranges().is_empty() {
             self.info("No matches to replace");
             return;

@@ -95,6 +95,13 @@ impl Snapshot {
             Snapshot::Rope(rope) => rope.to_string(),
         }
     }
+
+    /// Character at `idx`, or `None` past the end.
+    pub fn char_at(&self, idx: usize) -> Option<char> {
+        match self {
+            Snapshot::Rope(rope) => rope.get_char(idx),
+        }
+    }
 }
 
 /// Rope backed [`TextStorage`].
