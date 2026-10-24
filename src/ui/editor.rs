@@ -21,7 +21,7 @@ use ratatui::Frame;
 
 use crate::buffer::motion::{char_width, visual_col_of};
 use crate::buffer::{Document, LayoutCache, LineLayout, Segment, TextStorage, WHOLE_LINE_LIMIT};
-use crate::config::Config;
+use crate::config::{Config, UiStyle};
 use crate::search::SearchState;
 use crate::syntax::{self, StateCache, Token};
 use crate::theme::Theme;
@@ -454,7 +454,7 @@ impl EditorRenderer<'_> {
         // --- layout ----------------------------------------------------------
         let digits = decimal_digits(line_count).max(3);
         let show_numbers = self.cfg.editor.line_numbers;
-        let gutter_w: u16 = if show_numbers { (digits + 1) as u16 } else { 0 };
+        let gutter_w = gutter_width(line_count, self.cfg);
         let text_x = area.x + gutter_w;
         let text_w = area.width.saturating_sub(gutter_w) as usize;
         if text_w == 0 {
@@ -575,6 +575,17 @@ impl EditorRenderer<'_> {
                 gutter,
                 Style::default().fg(theme.gutter_fg).bg(theme.gutter_bg),
             );
+            // One column of air after the numbers, then a hairline, then one
+            // more of air before the text. The rule sits outside the cursor-line
+            // band, so the band still starts exactly at `text_x`.
+            if self.cfg.ui_style() == UiStyle::Pixel {
+                let x = area.x + digits as u16 + 1;
+                for y in area.y..area.y + area.height {
+                    let cell = &mut buf[(x, y)];
+                    cell.set_symbol("▏");
+                    cell.fg = theme.gutter_fg;
+                }
+            }
         }
 
         let selections = self.doc.selections();
@@ -767,6 +778,25 @@ fn draw_indent_guides(
         }
         guide += ctx.tab_width;
     }
+}
+
+/// Columns the line-number gutter occupies.
+///
+/// The renderer and every screen-to-buffer mapping have to agree on this, so it
+/// is computed in one place. The numbers come first, then a column of padding.
+/// The pixel style turns the column after the padding into a hairline and keeps
+/// one column of air before the text; the block style has neither, so its gutter
+/// is the width it always was.
+pub fn gutter_width(line_count: usize, cfg: &Config) -> u16 {
+    if !cfg.editor.line_numbers {
+        return 0;
+    }
+    let digits = decimal_digits(line_count).max(3);
+    let rule = match cfg.ui_style() {
+        UiStyle::Pixel => 2,
+        UiStyle::Cell => 0,
+    };
+    (digits + 1 + rule) as u16
 }
 
 /// Number of decimal digits in `n` (at least 1).

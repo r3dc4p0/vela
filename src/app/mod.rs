@@ -497,10 +497,7 @@ impl App {
     /// Columns the line-number gutter occupies, which the renderer and every
     /// screen-to-buffer mapping must agree on.
     fn gutter_width(&self, doc: &crate::buffer::Document) -> u16 {
-        if !self.config.editor.line_numbers {
-            return 0;
-        }
-        (crate::ui::editor::decimal_digits(doc.line_count()).max(3) + 1) as u16
+        crate::ui::editor::gutter_width(doc.line_count(), &self.config)
     }
 
     /// Columns the editor gives to text: its width minus the gutter. Zero
@@ -1019,6 +1016,11 @@ impl App {
             }
 
             Command::ToggleTheme => self.toggle_theme(),
+            Command::ToggleUiStyle => {
+                let next = self.config.ui_style().other();
+                self.config.ui.style = next.name().to_string();
+                self.info(format!("UI style: {}", next.name()));
+            }
             Command::ToggleLineNumbers => {
                 self.config.editor.line_numbers = !self.config.editor.line_numbers;
                 self.info(format!(

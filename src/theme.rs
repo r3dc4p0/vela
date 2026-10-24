@@ -74,6 +74,9 @@ pub struct Theme {
     /// Used for the "the cursor is not on screen" readout, so it reads as a
     /// remark about the view rather than as another coordinate.
     pub statusbar_away: Color,
+    /// Behind a badge in a bar — the percentage readout. A shade off the bar it
+    /// sits on, which is all a pill is in a cell grid.
+    pub pill_bg: Color,
 
     pub hint_bg: Color,
     pub hint_fg: Color,
@@ -89,6 +92,15 @@ pub struct Theme {
     pub current_match_bg: Color,
 
     pub border: Color,
+    /// Hairlines: the dividers inside a bar and the frame of a panel.
+    ///
+    /// Dimmer than [`Theme::border`] on purpose. A panel frame is a container
+    /// and should be seen; a divider between two tabs is a seam and should only
+    /// be inferred.
+    pub line: Color,
+    /// The accent that marks *this one*: the wordmark, the modified dot, the
+    /// active tab's edge, the language in the status bar.
+    pub mark: Color,
     pub overlay_bg: Color,
     pub overlay_sel_bg: Color,
     pub overlay_sel_fg: Color,
@@ -153,28 +165,34 @@ impl Theme {
 
             bg: Color::Rgb(0x14, 0x17, 0x1e),
             fg: Color::Rgb(0xd7, 0xdb, 0xe3),
-            dim: Color::Rgb(0x5c, 0x63, 0x73),
+            dim: Color::Rgb(0x7c, 0x86, 0x96),
 
             gutter_fg: Color::Rgb(0x4a, 0x51, 0x60),
             gutter_active_fg: Color::Rgb(0xc8, 0xa0, 0x5a),
             gutter_bg: Color::Rgb(0x14, 0x17, 0x1e),
 
-            topbar_bg: Color::Rgb(0x1c, 0x21, 0x2b),
+            topbar_bg: Color::Rgb(0x10, 0x13, 0x1a),
             topbar_fg: Color::Rgb(0xa8, 0xb0, 0xc0),
             topbar_accent: Color::Rgb(0x7a, 0xb8, 0xd8),
 
+            // Every bar is its own shade, and the steps are what draws the
+            // separations a pixel design would draw with a line: the tab strip
+            // is a shade under the top bar, the hint bar a shade under the
+            // status bar, and the active tab is the document's own surface, so
+            // it opens into the text instead of sitting on it.
             tab_active_bg: Color::Rgb(0x14, 0x17, 0x1e),
             tab_active_fg: Color::Rgb(0xe8, 0xec, 0xf4),
-            tab_inactive_bg: Color::Rgb(0x1c, 0x21, 0x2b),
-            tab_inactive_fg: Color::Rgb(0x6b, 0x74, 0x86),
+            tab_inactive_bg: Color::Rgb(0x0f, 0x12, 0x18),
+            tab_inactive_fg: Color::Rgb(0x7c, 0x86, 0x96),
 
-            statusbar_bg: Color::Rgb(0x1c, 0x21, 0x2b),
+            statusbar_bg: Color::Rgb(0x10, 0x13, 0x1a),
             statusbar_fg: Color::Rgb(0x9a, 0xa3, 0xb5),
             statusbar_accent: Color::Rgb(0x7a, 0xb8, 0xd8),
             statusbar_away: Color::Rgb(0xd8, 0xa8, 0x4f),
+            pill_bg: Color::Rgb(0x1e, 0x24, 0x30),
 
-            hint_bg: Color::Rgb(0x1a, 0x1e, 0x27),
-            hint_fg: Color::Rgb(0x6b, 0x74, 0x86),
+            hint_bg: Color::Rgb(0x0d, 0x10, 0x16),
+            hint_fg: Color::Rgb(0x9a, 0xa3, 0xb2),
 
             selection_bg: Color::Rgb(0x2d, 0x3b, 0x54),
             selection_fg: Color::Rgb(0xe8, 0xec, 0xf4),
@@ -187,6 +205,8 @@ impl Theme {
             current_match_bg: Color::Rgb(0x8a, 0x6d, 0x2c),
 
             border: Color::Rgb(0x33, 0x3a, 0x48),
+            line: Color::Rgb(0x24, 0x2b, 0x36),
+            mark: Color::Rgb(0xc8, 0xa0, 0x5a),
             overlay_bg: Color::Rgb(0x1c, 0x21, 0x2b),
             overlay_sel_bg: Color::Rgb(0x2d, 0x3b, 0x54),
             overlay_sel_fg: Color::Rgb(0xff, 0xff, 0xff),
@@ -224,28 +244,29 @@ impl Theme {
 
             bg: Color::Rgb(0xfa, 0xfa, 0xf7),
             fg: Color::Rgb(0x2b, 0x30, 0x38),
-            dim: Color::Rgb(0x9a, 0xa1, 0xac),
+            dim: Color::Rgb(0x8a, 0x90, 0x9a),
 
             gutter_fg: Color::Rgb(0xb2, 0xb8, 0xc2),
             gutter_active_fg: Color::Rgb(0x9a, 0x6b, 0x1e),
             gutter_bg: Color::Rgb(0xfa, 0xfa, 0xf7),
 
-            topbar_bg: Color::Rgb(0xef, 0xef, 0xea),
+            topbar_bg: Color::Rgb(0xe9, 0xe9, 0xe3),
             topbar_fg: Color::Rgb(0x4a, 0x50, 0x5a),
             topbar_accent: Color::Rgb(0x1f, 0x6f, 0x96),
 
             tab_active_bg: Color::Rgb(0xfa, 0xfa, 0xf7),
             tab_active_fg: Color::Rgb(0x1a, 0x1d, 0x22),
-            tab_inactive_bg: Color::Rgb(0xef, 0xef, 0xea),
+            tab_inactive_bg: Color::Rgb(0xe2, 0xe2, 0xdc),
             tab_inactive_fg: Color::Rgb(0x8a, 0x90, 0x9a),
 
-            statusbar_bg: Color::Rgb(0xef, 0xef, 0xea),
+            statusbar_bg: Color::Rgb(0xe9, 0xe9, 0xe3),
             statusbar_fg: Color::Rgb(0x4a, 0x50, 0x5a),
             statusbar_accent: Color::Rgb(0x1f, 0x6f, 0x96),
             statusbar_away: Color::Rgb(0x9a, 0x6b, 0x1e),
+            pill_bg: Color::Rgb(0xe2, 0xe2, 0xdb),
 
-            hint_bg: Color::Rgb(0xf2, 0xf2, 0xed),
-            hint_fg: Color::Rgb(0x8a, 0x90, 0x9a),
+            hint_bg: Color::Rgb(0xdc, 0xdc, 0xd6),
+            hint_fg: Color::Rgb(0x6b, 0x72, 0x80),
 
             selection_bg: Color::Rgb(0xd6, 0xe4, 0xf5),
             selection_fg: Color::Rgb(0x1a, 0x1d, 0x22),
@@ -258,6 +279,8 @@ impl Theme {
             current_match_bg: Color::Rgb(0xff, 0xd0, 0x54),
 
             border: Color::Rgb(0xd0, 0xd0, 0xc8),
+            line: Color::Rgb(0xdc, 0xdc, 0xd4),
+            mark: Color::Rgb(0x9a, 0x6b, 0x1e),
             overlay_bg: Color::Rgb(0xef, 0xef, 0xea),
             overlay_sel_bg: Color::Rgb(0xd6, 0xe4, 0xf5),
             overlay_sel_fg: Color::Rgb(0x00, 0x00, 0x00),
@@ -339,6 +362,7 @@ impl Theme {
             "statusbar_fg" => self.statusbar_fg = c,
             "statusbar_accent" => self.statusbar_accent = c,
             "statusbar_away" => self.statusbar_away = c,
+            "pill" | "pill_bg" => self.pill_bg = c,
             "hint_bg" => self.hint_bg = c,
             "hint_fg" => self.hint_fg = c,
             "selection_bg" => self.selection_bg = c,
@@ -350,6 +374,8 @@ impl Theme {
             "match_fg" => self.match_fg = c,
             "current_match_bg" => self.current_match_bg = c,
             "border" => self.border = c,
+            "line" | "divider" | "hairline" => self.line = c,
+            "mark" | "accent_gold" => self.mark = c,
             "overlay_bg" => self.overlay_bg = c,
             "overlay_sel_bg" => self.overlay_sel_bg = c,
             "overlay_sel_fg" => self.overlay_sel_fg = c,

@@ -299,12 +299,12 @@
   .term .tab {
     padding: 5px 14px;
     color: var(--fg-faint);
-    border-right: 1px solid var(--line-soft);
+    border-left: 1px solid var(--line-soft);
   }
   .term .tab.active {
     background: var(--panel);
     color: var(--fg);
-    box-shadow: inset 0 2px 0 var(--gold);
+    border-left-color: var(--gold);
   }
 
   .term .code { padding: 10px 0 12px; }
@@ -831,6 +831,21 @@
           <h3>Undo you can trust</h3>
           <p>Transaction-based history with coalescing that restores cursor and selection. Replace-all, indent and trim are each one undo step.</p>
         </article>
+
+        <article class="card">
+          <h3>Ten cursors, one undo step</h3>
+          <p><span class="inline-code">Ctrl+Alt+Down</span> stacks carets, <span class="inline-code">Ctrl+D</span> adds one per occurrence of the selection, <span class="inline-code">Alt+Click</span> puts one where you point. Everything you type lands at every caret &mdash; and comes back in a single undo.</p>
+        </article>
+
+        <article class="card">
+          <h3>Picks up where you left off</h3>
+          <p>Recent files and the last session are restored on start, so closing the editor is not the same as losing your place.</p>
+        </article>
+
+        <article class="card">
+          <h3>Borders that cost a fraction of a row</h3>
+          <p>A panel is framed on the edge of its cells rather than in whole ones, so a border is a hairline and never a bar. Prefer the older block chrome? <span class="inline-code">Ctrl+Shift+U</span>, or <span class="inline-code">--ui cell</span>.</p>
+        </article>
       </div>
     </div>
   </section>
@@ -872,6 +887,7 @@
         <div class="key-row"><span class="what">Close buffer</span><span class="combo"><kbd>Ctrl</kbd> <kbd>W</kbd></span></div>
         <div class="key-row"><span class="what">Word wrap</span><span class="combo"><kbd>Alt</kbd> <kbd>W</kbd></span></div>
         <div class="key-row"><span class="what">Show whitespace</span><span class="combo"><kbd>Alt</kbd> <kbd>Z</kbd></span></div>
+        <div class="key-row"><span class="what">UI style</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>U</kbd></span></div>
         <div class="key-row"><span class="what">Help</span><span class="combo"><kbd>F1</kbd></span></div>
       </div>
     </div>

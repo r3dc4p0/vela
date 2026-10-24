@@ -14,7 +14,7 @@ use crate::commands::{Category, Command};
 use crate::keymap::KeyChord;
 use crate::theme::Theme;
 
-use super::chrome::{centered, draw_field, fit, panel, wipe};
+use super::chrome::{centered, draw_field, fit, panel, wipe, Deco};
 
 /// Draw whichever overlay is open. Returns the cursor position, if any.
 ///
@@ -24,6 +24,7 @@ use super::chrome::{centered, draw_field, fit, panel, wipe};
 pub fn draw(frame: &mut Frame, app: &mut App) -> Option<(u16, u16)> {
     let area = frame.area();
     let theme = app.theme.clone();
+    let deco = Deco::for_app(app);
     let counter = app.search.counter();
     let overlay = std::mem::replace(&mut app.ui.overlay, Overlay::None);
     let buf = frame.buffer_mut();
@@ -31,7 +32,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Option<(u16, u16)> {
     let (result, restored) = match overlay {
         Overlay::None => (None, Overlay::None),
         Overlay::Palette(mut p) => {
-            let r = draw_palette(buf, area, &theme, &mut p, &counter);
+            let r = draw_palette(buf, area, &theme, deco, &mut p, &counter);
             (r, Overlay::Palette(p))
         }
         Overlay::Find(mut f) => {
@@ -49,20 +50,20 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Option<(u16, u16)> {
             (r, Overlay::GotoLine(input))
         }
         Overlay::Open(mut p) => {
-            let r = draw_path_prompt(buf, area, &theme, " Open file: ", &mut p);
+            let r = draw_path_prompt(buf, area, &theme, deco, " Open file: ", &mut p);
             (r, Overlay::Open(p))
         }
         Overlay::SaveAs(mut p) => {
-            let r = draw_path_prompt(buf, area, &theme, " Save as: ", &mut p);
+            let r = draw_path_prompt(buf, area, &theme, deco, " Save as: ", &mut p);
             (r, Overlay::SaveAs(p))
         }
         Overlay::Confirm(c) => {
-            let r = draw_confirm(buf, area, &theme, &c);
+            let r = draw_confirm(buf, area, &theme, deco, &c);
             (r, Overlay::Confirm(c))
         }
         Overlay::Help(mut h) => {
             let lines = help_lines(app);
-            let r = draw_help(buf, area, &theme, &lines, &mut h);
+            let r = draw_help(buf, area, &theme, deco, &lines, &mut h);
             (r, Overlay::Help(h))
         }
     };
@@ -75,6 +76,7 @@ fn draw_palette(
     buf: &mut Buffer,
     area: Rect,
     theme: &Theme,
+    deco: Deco,
     palette: &mut Palette,
     _counter: &str,
 ) -> Option<(u16, u16)> {
@@ -83,7 +85,7 @@ fn draw_palette(
         PaletteMode::Commands => "Commands",
         PaletteMode::Files => "Open File",
     };
-    let inner = panel(buf, rect, title, theme);
+    let inner = panel(buf, rect, title, theme, deco);
     if inner.height < 2 {
         return None;
     }
@@ -100,13 +102,19 @@ fn draw_palette(
         true,
     );
 
-    // Separator
+    // Separator. The pixel style draws the field's bottom edge inside its own
+    // row, so the divider is a hairline rather than a row of `─`.
     if inner.height >= 3 {
+        let (glyph, colour) = if deco.hairline_panels {
+            ("▁", theme.line)
+        } else {
+            ("─", theme.border)
+        };
         buf.set_string(
             inner.x,
             inner.y + 1,
-            "─".repeat(inner.width as usize),
-            Style::default().fg(theme.border),
+            glyph.repeat(inner.width as usize),
+            Style::default().fg(colour),
         );
     }
 
@@ -327,6 +335,7 @@ fn draw_path_prompt(
     buf: &mut Buffer,
     area: Rect,
     theme: &Theme,
+    deco: Deco,
     label: &str,
     prompt: &mut PathPrompt,
 ) -> Option<(u16, u16)> {
@@ -339,7 +348,7 @@ fn draw_path_prompt(
         let h = visible as u16 + 2;
         let w = area.width.min(60);
         let rect = Rect::new(area.x, area.y + area.height - 2 - h + 1, w, h);
-        let inner = panel(buf, rect, "Completions", theme);
+        let inner = panel(buf, rect, "Completions", theme, deco);
         for i in 0..visible {
             let y = inner.y + i as u16;
             if y >= inner.y + inner.height {
@@ -381,6 +390,7 @@ fn draw_confirm(
     buf: &mut Buffer,
     area: Rect,
     theme: &Theme,
+    deco: Deco,
     confirm: &Confirm,
 ) -> Option<(u16, u16)> {
     let w = area.width.clamp(20, 70);
@@ -391,7 +401,7 @@ fn draw_confirm(
         w,
         h,
     );
-    let inner = panel(buf, rect, "Confirm", theme);
+    let inner = panel(buf, rect, "Confirm", theme, deco);
     if inner.height < 2 {
         return None;
     }
@@ -429,11 +439,12 @@ fn draw_help(
     buf: &mut Buffer,
     area: Rect,
     theme: &Theme,
+    deco: Deco,
     lines: &[String],
     help: &mut super::HelpState,
 ) -> Option<(u16, u16)> {
     let rect = centered(area, 90, 85);
-    let inner = panel(buf, rect, "Keyboard Shortcuts — Esc to close", theme);
+    let inner = panel(buf, rect, "Keyboard Shortcuts — Esc to close", theme, deco);
     let max_scroll = lines.len().saturating_sub(inner.height as usize);
     if help.scroll > max_scroll {
         help.scroll = max_scroll;

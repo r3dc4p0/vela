@@ -11,8 +11,12 @@ use common::*;
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use vela::commands::Command;
 
-/// Columns taken by the line-number gutter: three digits plus one space.
-const GUTTER: usize = 4;
+/// Columns taken by the line-number gutter, asked of the same function the
+/// renderer uses: the pixel style draws a rule in it, the block style does not.
+fn gutter(app: &vela::app::App) -> usize {
+    let doc = app.active_doc().expect("a buffer");
+    vela::ui::editor::gutter_width(doc.line_count(), &app.config) as usize
+}
 
 /// A line long enough to need several rows at the widths used below.
 const LONG: &str = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
@@ -35,7 +39,7 @@ fn body_rows(app: &mut vela::app::App, width: u16, height: u16) -> Vec<String> {
     editor_rows(app, width, height)
         .into_iter()
         .map(|row| {
-            let text: String = row.chars().skip(GUTTER).collect();
+            let text: String = row.chars().skip(gutter(app)).collect();
             text.trim_end().to_string()
         })
         .collect()
@@ -86,7 +90,7 @@ fn a_long_line_is_painted_over_several_rows() {
     let area = app.editor_area();
     for row in &painted {
         assert!(
-            row.chars().count() <= area.width as usize - GUTTER,
+            row.chars().count() <= area.width as usize - gutter(&app),
             "row wider than the editor: {row:?}"
         );
     }
@@ -101,7 +105,12 @@ fn the_line_number_is_painted_once_per_line() {
     let rows = editor_rows(&mut app, 40, 20);
     let numbered = rows
         .iter()
-        .filter(|r| r.chars().take(GUTTER).collect::<String>().contains('1'))
+        .filter(|r| {
+            r.chars()
+                .take(gutter(&app))
+                .collect::<String>()
+                .contains('1')
+        })
         .count();
     assert_eq!(
         numbered, 1,
@@ -195,7 +204,7 @@ fn the_view_follows_the_cursor_down_a_wrapped_line() {
     );
 
     // The caret is on screen: its row is between the viewport top and bottom.
-    let width = area.width as usize - GUTTER;
+    let width = area.width as usize - gutter(&app);
     let layout = vela::buffer::wrap::LineLayout::new(&doc.line_text(line), width, 4);
     let row = layout.row_of(off);
     assert!(
@@ -268,10 +277,11 @@ fn clicking_a_continuation_row_places_the_cursor_on_that_character() {
         "pick a visible character: {rows:?}"
     );
 
+    let g = gutter(&app);
     send(
         &mut app,
         MouseEventKind::Down(MouseButton::Left),
-        area.x + GUTTER as u16 + col as u16,
+        area.x + g as u16 + col as u16,
         area.y + row as u16,
     );
     let doc = &app.buffers[0];
@@ -292,7 +302,7 @@ fn a_drag_along_a_wrapped_line_selects_contiguously() {
     let _ = screen(&mut app, 40, 20);
     let area = app.editor_area();
 
-    let x = area.x + GUTTER as u16 + 2;
+    let x = area.x + gutter(&app) as u16 + 2;
     send(&mut app, MouseEventKind::Down(MouseButton::Left), x, area.y);
     send(
         &mut app,
@@ -305,8 +315,7 @@ fn a_drag_along_a_wrapped_line_selects_contiguously() {
     assert_eq!(sel.start, 2, "the drag started at the clicked column");
     assert!(
         sel.end > 31,
-        "dragging into the next row selects past the end of the first row, \
-         which is 31 columns wide: {sel:?}"
+        "dragging into the next row selects past the end of the first row: {sel:?}"
     );
     let selected = doc.selected_text();
     assert_eq!(
@@ -371,12 +380,12 @@ fn a_token_that_spans_the_wrap_keeps_its_colour_on_both_rows() {
     // run over the whole line and each row take its clipped share, rather than
     // lexing a row in isolation and starting it in the default state.
     for row in 1..3u16 {
-        let painted: Vec<&str> = (area.x + GUTTER as u16..area.x + area.width)
+        let painted: Vec<&str> = (area.x + gutter(&app) as u16..area.x + area.width)
             .filter(|&x| buf[(x, area.y + row)].symbol() != " ")
             .map(|x| buf[(x, area.y + row)].symbol())
             .collect();
         assert!(!painted.is_empty(), "row {row} has text");
-        let coloured = (area.x + GUTTER as u16..area.x + area.width).any(|x| {
+        let coloured = (area.x + gutter(&app) as u16..area.x + area.width).any(|x| {
             buf[(x, area.y + row)].symbol() != " " && buf[(x, area.y + row)].fg == comment
         });
         assert!(

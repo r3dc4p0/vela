@@ -42,21 +42,53 @@ fn wait_for_open(app: &mut vela::app::App) {
 
 fn has_panel(rows: &[String]) -> bool {
     // The toast says "Opening big.txt (6.0 MiB)…" too, so match the panel's
-    // top border rather than the word.
-    rows.iter().any(|r| r.contains("┌ Opening"))
+    // top border rather than the word. Either style's border will do: the pixel
+    // style cuts the title into a hairline, the cell style into a box.
+    rows.iter()
+        .any(|r| r.contains("▔ Opening") || r.contains("┌ Opening"))
 }
 
-/// Just the panel's own rows.
+/// Just the panel's own rows, from its title row to the row that closes it.
 ///
 /// The status bar carries a percentage of its own ("Ln 1, Col 1   100%"), so
 /// assertions about the bar have to look inside the box or they pass on the
-/// wrong text.
+/// wrong text. Picking rows by their border characters is not enough in the
+/// pixel style, where the status bar also contains `▏`.
 fn panel_text(rows: &[String]) -> String {
-    rows.iter()
-        .filter(|r| r.contains('│') || r.contains('┌') || r.contains('└'))
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n")
+    let Some(top) = rows.iter().position(|r| r.contains(" Opening ")) else {
+        return String::new();
+    };
+    let bottom = rows[top..]
+        .iter()
+        .position(|r| r.contains('└') || r.contains('▁'))
+        .map_or(rows.len() - 1, |i| top + i);
+    rows[top..=bottom].join("\n")
+}
+
+/// How many cells of the progress bar are actually painted.
+///
+/// The cell style shades the empty track with `░`; the pixel style paints it as
+/// a surface, which no text dump can see, so this counts cells instead of
+/// looking for characters. Either way the count is never zero while the panel
+/// is up, whichever phase the worker happens to be in.
+fn painted_bar(app: &mut vela::app::App, width: u16, height: u16) -> usize {
+    let mut terminal =
+        ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    let buf = terminal.backend().buffer().clone();
+    let track = app.theme.border;
+    let mut n = 0;
+    for y in 0..height {
+        for x in 0..width {
+            let cell = &buf[(x, y)];
+            let filled = matches!(cell.symbol(), "█" | "░");
+            let empty_track = cell.symbol() == " " && cell.bg == track;
+            if filled || empty_track {
+                n += 1;
+            }
+        }
+    }
+    n
 }
 
 #[test]
@@ -78,7 +110,10 @@ fn a_big_file_shows_a_loader_until_it_lands() {
     );
     // The bar's track is always drawn; whether it carries a percentage depends
     // on which phase the worker happens to be in, which a test cannot pin down.
-    assert!(panel.contains('░'), "the panel has a bar:\n{rows:#?}");
+    assert!(
+        painted_bar(&mut app, 80, 24) >= 8,
+        "the panel has a bar:\n{rows:#?}"
+    );
 
     wait_for_open(&mut app);
     assert!(app.loading.is_none());

@@ -95,6 +95,7 @@ horizontally once the longest line ends.
 | `F1` | `help.show` | Help screen, generated from the live keymap |
 | `Ctrl+Shift+P` | `help.commandPalette` | Command palette |
 | `Ctrl+Shift+T` | `view.toggleTheme` | Dark / light |
+| `Ctrl+Shift+U` | `view.toggleUiStyle` | Hairline chrome / block chrome |
 | `Alt+Z` | `view.toggleWhitespace` | Show tabs, spaces and control characters |
 | `Alt+W` | `view.toggleWordWrap` | Wrap long lines at the window width |
 
@@ -104,6 +105,13 @@ in configuration with `[editor] word_wrap = true`. While wrapping is on there is
 nothing to scroll to horizontally, so the horizontal wheel does nothing; the
 vertical wheel and the cursor motions step by *rows*, not by lines, so a single
 wrapped line can fill the window and be scrolled through.
+
+`Ctrl+Shift+U` switches how the chrome is drawn. `pixel`, the default, spends a
+fraction of a cell on a border: panels are framed by hairlines on the edge of
+their rows and columns, tabs are split by `▏`, and the line-number gutter is
+ruled off from the text. `cell` is the block-glyph chrome, where a border is a
+whole cell of `│` and `─`. It is a session setting, and can be set in
+configuration with `[ui] style = "cell"` or per run with `vela --ui cell`.
 
 ## Terminal limitations (read this)
 

@@ -13,8 +13,12 @@ use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEvent, MouseEventKind}
 use ratatui::layout::Rect;
 use vela::app::App;
 
-/// Columns taken by the line-number gutter: three digits plus one space.
-const GUTTER: usize = 4;
+/// Columns taken by the line-number gutter, asked of the same function the
+/// renderer uses — it is wider in the pixel style, which draws a rule in it.
+fn gutter(app: &App) -> usize {
+    let doc = app.active_doc().expect("a buffer");
+    vela::ui::editor::gutter_width(doc.line_count(), &app.config) as usize
+}
 
 /// One wheel notch. The column and row are irrelevant: the wheel scrolls the
 /// viewport wherever the pointer happens to be.
@@ -58,9 +62,18 @@ fn open_fixture(app: &mut App, path: &std::path::Path, width: u16, height: u16) 
 /// The last visible line of the editor area, as rendered.
 fn last_editor_row(app: &mut App, area: Rect, width: u16, height: u16) -> String {
     let rows = screen(app, width, height);
-    rows[(area.y + area.height - 1) as usize]
-        .trim_start()
-        .to_string()
+    strip_gutter(&rows[(area.y + area.height - 1) as usize])
+}
+
+/// Drop the gutter from a rendered row, leaving the text it shows.
+///
+/// The pixel style separates the numbers from the text with a `▏`; the block
+/// style only has spaces, so the fallback trims those and keeps the number.
+fn strip_gutter(row: &str) -> String {
+    match row.find('▏') {
+        Some(i) => row[i + '▏'.len_utf8()..].trim_start().to_string(),
+        None => row.trim_start().to_string(),
+    }
 }
 
 /// The status bar row, found by its position readout.
@@ -248,7 +261,7 @@ fn the_wheel_stops_at_the_last_full_page() {
     // The row also carries the "opened file" notification, which floats over
     // the bottom of the editor, so only the left edge is the line itself.
     assert!(
-        last_editor_row(&mut app, area, 80, 24).starts_with("30 line 30"),
+        last_editor_row(&mut app, area, 80, 24).starts_with("line 30"),
         "the last line sits on the last row"
     );
 }
@@ -268,8 +281,9 @@ fn the_sideways_wheel_survives_the_next_draw() {
     assert_eq!(cursor(&app), 0, "the cursor stays put horizontally too");
     // The fixture repeats, so the row must be checked from its left edge: the
     // gutter, then the text from column 8 onwards.
+    let row = strip_gutter(&rows[area.y as usize]);
     assert!(
-        rows[area.y as usize].trim_start().starts_with("1 ijklmnop"),
+        row.starts_with("ijklmnop"),
         "the row starts at column 8: {:?}",
         rows[area.y as usize]
     );
@@ -278,13 +292,14 @@ fn the_sideways_wheel_survives_the_next_draw() {
 #[test]
 fn the_sideways_wheel_stops_at_the_end_of_the_longest_line() {
     let scratch = Scratch::new();
-    // 120 columns of text in an 80-column window: 44 columns of slack, and not
-    // one more. Before the bound existed the wheel kept going forever into
-    // blank cells, which is what made the buffer feel like an endless canvas.
+    // 120 columns of text in an 80-column window, less the gutter: what is left
+    // over is slack, and not one column more. Before the bound existed the wheel
+    // kept going forever into blank cells, which is what made the buffer feel
+    // like an endless canvas.
     let path = scratch.file("wide.txt", &"a".repeat(120));
     let mut app = editor(scratch.path());
     let area = open_fixture(&mut app, &path, 80, 24);
-    let text_width = area.width as usize - GUTTER;
+    let text_width = area.width as usize - gutter(&app);
 
     for _ in 0..30 {
         wheel(&mut app, MouseEventKind::ScrollRight);

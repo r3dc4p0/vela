@@ -44,6 +44,13 @@ it can look anywhere in the buffer; when the cursor leaves the screen the
 status bar keeps reporting its line, in amber. `Alt+Click` adds a cursor.
 Disable the lot with `mouse = false`.
 
+**Look** — the chrome is drawn the way the design on the website is drawn: a
+border is a fraction of a cell rather than a whole one, so panels are framed by
+hairlines on the edge of their rows, tabs are split by a rule, and the
+line-number gutter is ruled off from the text. The percentage in the status bar
+is a badge. If you prefer the older block-glyph chrome, `Ctrl+Shift+U`,
+`--ui cell` or `[ui] style = "cell"` brings it back.
+
 **Files** — multiple buffers with tabs; atomic saves (temp file + `fsync` +
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM
 detection; LF/CRLF/CR line endings detected per file and written back unchanged;
@@ -92,6 +99,7 @@ vela --list-keys        # print every command and its bindings
 | Flag | Meaning |
 | --- | --- |
 | `-c`, `--config <FILE>` | Use a specific configuration file |
+| `--ui <pixel\|cell>` | How the chrome is drawn: hairlines or block glyphs |
 | `--print-config` | Print the effective configuration and exit |
 | `--list-keys` | Print the key bindings and exit |
 | `--smoke` | Start, draw one frame and exit (startup check for CI) |
@@ -152,6 +160,7 @@ word_wrap = false
 
 [ui]
 theme = "vela-dark"        # or "vela-light"
+style = "pixel"            # or "cell" — block borders instead of hairlines
 show_hints = true
 mouse = true
 

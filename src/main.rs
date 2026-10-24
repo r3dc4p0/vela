@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use vela::app::App;
-use vela::config::{Config, Enhancement};
+use vela::config::{Config, Enhancement, UiStyle};
 use vela::logging;
 use vela::platform;
 use vela::terminal::TerminalGuard;
@@ -23,6 +23,7 @@ OPTIONS:
     -h, --help              Print this help and exit
     -V, --version           Print version information and exit
     -c, --config <PATH>     Use an alternative configuration file
+        --ui <STYLE>        Drawing style: pixel (hairlines) or cell (blocks)
         --no-log            Disable file logging
         --print-config      Print the effective configuration and exit
         --list-keys         Print the effective key bindings and exit
@@ -47,6 +48,7 @@ KEY SHORTCUTS:
 struct Args {
     files: Vec<PathBuf>,
     config: Option<PathBuf>,
+    ui: Option<UiStyle>,
     verbose: bool,
     no_log: bool,
     print_config: bool,
@@ -60,6 +62,7 @@ fn parse_args() -> Result<Args, String> {
     let mut args = Args {
         files: Vec::new(),
         config: None,
+        ui: None,
         verbose: false,
         no_log: false,
         print_config: false,
@@ -79,6 +82,20 @@ fn parse_args() -> Result<Args, String> {
             "--print-config" => args.print_config = true,
             "--list-keys" => args.list_keys = true,
             "--smoke" => args.smoke = true,
+            "--ui" => {
+                let value = it.next().ok_or("--ui requires a style")?;
+                args.ui = Some(
+                    UiStyle::parse(&value)
+                        .ok_or_else(|| format!("--ui expects `pixel` or `cell`, got `{value}`"))?,
+                );
+            }
+            other if other.starts_with("--ui=") => {
+                let value = &other["--ui=".len()..];
+                args.ui = Some(
+                    UiStyle::parse(value)
+                        .ok_or_else(|| format!("--ui expects `pixel` or `cell`, got `{value}`"))?,
+                );
+            }
             "-c" | "--config" => {
                 let value = it.next().ok_or("--config requires a path")?;
                 args.config = Some(PathBuf::from(value));
@@ -122,6 +139,11 @@ fn main() -> ExitCode {
     let loaded = Config::load_or_default(args.config.as_deref());
     let mut config = loaded.config;
     let warnings = loaded.warnings.clone();
+    // The command line wins over the file, and it has to do so before the
+    // normalisation pass so `--print-config` reports what will be drawn.
+    if let Some(style) = args.ui {
+        config.ui.style = style.name().to_string();
+    }
     config.normalize();
 
     if args.print_config {

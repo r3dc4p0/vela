@@ -16,7 +16,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::chrome::{fit, panel};
+use super::chrome::{fit, panel, Deco};
 use super::App;
 use crate::app::{Loading, LOADER_DELAY};
 use crate::theme::Theme;
@@ -52,14 +52,22 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
 
     let rect = centered(area, PANEL_WIDTH.min(area.width), PANEL_HEIGHT);
-    let inner = panel(buf, rect, "Opening", &app.theme);
+    let deco = Deco::for_app(app);
+    let inner = panel(buf, rect, "Opening", &app.theme, deco);
     if inner.height < 3 {
         return;
     }
-    draw_body(buf, inner, &app.theme, loading, app.frame);
+    draw_body(buf, inner, &app.theme, deco, loading, app.frame);
 }
 
-fn draw_body(buf: &mut Buffer, inner: Rect, theme: &Theme, loading: &Loading, frame: u64) {
+fn draw_body(
+    buf: &mut Buffer,
+    inner: Rect,
+    theme: &Theme,
+    deco: Deco,
+    loading: &Loading,
+    frame: u64,
+) {
     let width = inner.width as usize;
 
     // Row 0: spinner, then the file's name.
@@ -88,18 +96,28 @@ fn draw_body(buf: &mut Buffer, inner: Rect, theme: &Theme, loading: &Loading, fr
     };
     let bar_w = width.saturating_sub(6);
     if bar_w >= 8 {
-        for (i, filled) in bar_cells(bar, bar_w, frame).iter().enumerate() {
-            let (glyph, colour) = if *filled {
-                ("█", theme.statusbar_accent)
+        // The pixel style paints the track as a surface and the progress as a
+        // solid block on it, so the bar reads as a filled rectangle rather than
+        // as a run of shaded characters.
+        let (filled, empty) = if deco.solid_track {
+            ("█", " ")
+        } else {
+            ("█", "░")
+        };
+        let empty_bg = if deco.solid_track {
+            theme.border
+        } else {
+            theme.overlay_bg
+        };
+        for (i, done) in bar_cells(bar, bar_w, frame).iter().enumerate() {
+            let (glyph, fg, bg) = if *done {
+                (filled, theme.statusbar_accent, theme.overlay_bg)
             } else {
-                ("░", theme.border)
+                (empty, theme.border, empty_bg)
             };
-            buf.set_string(
-                inner.x + i as u16,
-                inner.y + 1,
-                glyph,
-                Style::default().fg(colour),
-            );
+            buf[(inner.x + i as u16, inner.y + 1)]
+                .set_symbol(glyph)
+                .set_style(Style::default().fg(fg).bg(bg));
         }
         if let Bar::Fraction(f) = bar {
             buf.set_string(

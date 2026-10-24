@@ -10,8 +10,15 @@ use common::*;
 use crossterm::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
-/// Columns taken by the line-number gutter: three digits plus one space.
-const GUTTER: u16 = 4;
+/// Columns taken by the line-number gutter.
+///
+/// Asked of the same function the renderer uses, so a change to the gutter —
+/// a wider column count, a divider column — moves the clicks with it instead of
+/// leaving every test pointing at the wrong cell.
+fn gutter(app: &vela::app::App) -> u16 {
+    let doc = app.active_doc().expect("a buffer");
+    vela::ui::editor::gutter_width(doc.line_count(), &app.config)
+}
 
 /// Render a frame and hand back the rects the draw pass published.
 fn frame(app: &mut vela::app::App, width: u16, height: u16) -> (Rect, Rect) {
@@ -53,9 +60,10 @@ fn click_places_the_cursor() {
     let mut app = editor(scratch.path());
     type_str(&mut app, "hello world");
     let (editor, _) = frame(&mut app, 80, 24);
+    let g = gutter(&app);
     assert!(editor.height > 0, "the draw pass publishes the editor rect");
 
-    click(&mut app, editor.x + GUTTER + 6, editor.y);
+    click(&mut app, editor.x + g + 6, editor.y);
     assert_eq!(app.buffers[0].cursor(), 6);
 }
 
@@ -81,10 +89,11 @@ fn dragging_selects_across_lines() {
     let mut app = editor(scratch.path());
     type_str(&mut app, "abc\ndef\nghi");
     let (editor, _) = frame(&mut app, 80, 24);
+    let g = gutter(&app);
 
-    press(&mut app, editor.x + GUTTER + 1, editor.y);
-    drag(&mut app, editor.x + GUTTER + 2, editor.y + 2);
-    release(&mut app, editor.x + GUTTER + 2, editor.y + 2);
+    press(&mut app, editor.x + g + 1, editor.y);
+    drag(&mut app, editor.x + g + 2, editor.y + 2);
+    release(&mut app, editor.x + g + 2, editor.y + 2);
 
     let doc = &app.buffers[0];
     assert_eq!(doc.selection(), Some(1..10), "from `b` down to `i`");
@@ -98,10 +107,11 @@ fn dragging_upwards_keeps_the_cursor_on_the_upper_edge() {
     let mut app = editor(scratch.path());
     type_str(&mut app, "abc\ndef\nghi");
     let (editor, _) = frame(&mut app, 80, 24);
+    let g = gutter(&app);
 
-    press(&mut app, editor.x + GUTTER + 2, editor.y + 2);
-    drag(&mut app, editor.x + GUTTER + 1, editor.y);
-    release(&mut app, editor.x + GUTTER + 1, editor.y);
+    press(&mut app, editor.x + g + 2, editor.y + 2);
+    drag(&mut app, editor.x + g + 1, editor.y);
+    release(&mut app, editor.x + g + 1, editor.y);
 
     let doc = &app.buffers[0];
     assert_eq!(doc.selection(), Some(1..10));
@@ -121,10 +131,11 @@ fn dragging_past_the_bottom_edge_autoscrolls() {
     let mut app = editor(scratch.path());
     open(&mut app, &path);
     let (editor, _) = frame(&mut app, 80, 12);
+    let g = gutter(&app);
 
     let before = app.buffers[app.active].scroll_top();
-    press(&mut app, editor.x + GUTTER, editor.y);
-    drag(&mut app, editor.x + GUTTER, editor.y + editor.height + 5);
+    press(&mut app, editor.x + g, editor.y);
+    drag(&mut app, editor.x + g, editor.y + editor.height + 5);
 
     let doc = &app.buffers[app.active];
     assert!(
@@ -141,7 +152,8 @@ fn double_click_selects_a_word_and_triple_click_the_line() {
     let mut app = editor(scratch.path());
     type_str(&mut app, "foo bar\nbaz qux");
     let (editor, _) = frame(&mut app, 80, 24);
-    let column = editor.x + GUTTER + 1;
+    let g = gutter(&app);
+    let column = editor.x + g + 1;
 
     click(&mut app, column, editor.y);
     assert_eq!(app.buffers[0].selection(), None, "one click just places it");
@@ -225,9 +237,10 @@ fn mouse_can_be_disabled() {
     let mut app = editor_with(scratch.path(), |c| c.ui.mouse = false);
     type_str(&mut app, "hello");
     let (editor, _) = frame(&mut app, 80, 24);
+    let g = gutter(&app);
     let before = app.buffers[0].cursor();
 
-    click(&mut app, editor.x + GUTTER, editor.y);
-    drag(&mut app, editor.x + GUTTER + 3, editor.y);
+    click(&mut app, editor.x + g, editor.y);
+    drag(&mut app, editor.x + g + 3, editor.y);
     assert_eq!(app.buffers[0].cursor(), before);
 }

@@ -230,6 +230,40 @@ combining marks zero. Long lines are rendered through a window that starts at th
 first visible character, so opening a 100 MB single-line file does not freeze the
 UI. Lines longer than 8 KiB are clipped rather than scanned to the end.
 
+### Two drawing styles, one layout
+
+The chrome can be drawn two ways. `pixel`, the default, is the design the landing
+page is drawn from; `cell` is the block-glyph chrome that came before it, kept
+behind `ui.style = "cell"`, `--ui cell` and `Ctrl+Shift+U`.
+
+They are two ways to paint one UI, not two UIs. `chrome::Deco` holds the whole
+difference — four booleans, no layout: hairline panels instead of boxes, a key
+painted brighter than the label it explains, a progress track that is a surface
+rather than a run of `░`, and a percentage badge instead of a bare readout.
+Everything else is shared, down to the words on screen, and `tests/ui_style.rs`
+asserts that: the same file renders the same text in both.
+
+The pixel style is built out of what a cell can hold, which is one glyph. A
+border therefore has to be a *fraction* of a cell, and four block elements do
+that: `▔` and `▁` draw on the top or bottom eighth, `▏` and `▕` on the left or
+right eighth. Three rules make them compose:
+
+- a panel's first and last rows are border rows either way, so a horizontal
+  rule is free there. Nowhere else: a rule *between* two bars would cost a whole
+  row, or have to underline the text above it, and both of those read as a
+  defect rather than a border.
+- the title is painted first and the rule skips its cells, which is what makes
+  it read as a legend cut into the line instead of a label sitting on top of it.
+- the side rules start below the top rule and stop above the bottom one, so the
+  corners belong to the horizontals and the seam that leaves is one dot.
+
+Everywhere else, structure is carried by surfaces — the tab strip a shade under
+the top bar, the hints a shade under the status bar, the active tab the colour
+of the document it opens into — and by vertical hairlines, which cost a column
+rather than a row: `▏` between tabs and in front of the line numbers. That is
+why the pixel style's gutter is two columns wider than the block style's, and
+the only place the two styles lay out differently.
+
 ### Mouse hit-testing reads the last frame
 
 Mouse events arrive as screen coordinates, but the mapping from a cell to a
@@ -351,6 +385,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| Drawing styles | `tests/ui_style.rs`: both styles render the same words, the pixel style frames panels in hairlines where the block style boxes them, a title breaks its own rule, no row is spent on a border and no bar is underlined, and the toggle is announced |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |
 | Performance | `benches/core_bench.rs` (Criterion) |
 

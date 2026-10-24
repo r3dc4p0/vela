@@ -33,7 +33,12 @@ fn caret_count(app: &vela::app::App) -> usize {
 /// a three-digit gutter.
 fn alt_click(app: &mut vela::app::App, line: usize, col: usize) {
     app.set_editor_area(Rect::new(0, 0, 80, 20));
-    let gutter = 4u16; // three digits + one space
+    // Asked of the same function the renderer uses, so a change to the gutter
+    // moves the clicks with it.
+    let gutter = {
+        let doc = app.active_doc().expect("a buffer");
+        vela::ui::editor::gutter_width(doc.line_count(), &app.config)
+    };
     app.handle_event(Event::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: gutter + col as u16,
