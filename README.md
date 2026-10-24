@@ -7,19 +7,24 @@ Vela is a modal-free editor for the terminal: `Ctrl+S` saves, `Ctrl+F` finds,
 palette. It opens instantly, handles large files without stalling, and never
 loses your work.
 
+[Website](https://r3dc4p0.github.io/vela/) · [Architecture](docs/architecture.md) ·
+[Key bindings](docs/keybindings.md) · [Roadmap](docs/roadmap.md)
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │ VELA · src/buffer/mod.rs ●                        2 buffers   v0.5.0 │
-├──────────────────────────────────────────────────────────────────────┤
-│  1  use std::ops::Range;                                             │
-│  2                                                                   │
-│  3  /// A text buffer backed by a rope.                              │
-│  4  pub struct Document {                                            │
-│  5      storage: Box<dyn TextStorage>,                               │
-│  ~                                                                   │
-│  ~                                                                   │
-├──────────────────────────────────────────────────────────────────────┤
-│ ● Rust  LF  UTF-8            Ln 4, Col 12    12%                     │
+│ ▏ storage.rs ▏ mod.rs ●                                              │
+│  1 ▏ use std::ops::Range;                                            │
+│  2 ▏                                                                 │
+│  3 ▏ /// A text buffer backed by a rope.                             │
+│  4 ▏ pub struct Document {                                           │
+│  5 ▏     storage: Box<dyn TextStorage>,                              │
+│  6 ▏     cursor: usize,                                              │
+│  7 ▏     history: History,                                           │
+│  8 ▏ }                                                               │
+│    ▏ ~                                                               │
+│    ▏ ~                                                               │
+│ ● Rust  LF  UTF-8                                 Ln 4, Col 12   12% │
 │ Ctrl+s save   ·   Ctrl+f find   ·   Ctrl+p open file   ·   F1 help   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
