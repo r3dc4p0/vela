@@ -19,7 +19,6 @@ use ratatui::style::{Modifier, Style};
 use super::chrome::{fit, panel};
 use super::App;
 use crate::app::{Loading, LOADER_DELAY};
-use crate::config::UiStyle;
 use crate::theme::Theme;
 
 /// Braille spinner. Ten frames, the same cycle every terminal progress
@@ -53,22 +52,14 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
 
     let rect = centered(area, PANEL_WIDTH.min(area.width), PANEL_HEIGHT);
-    let style = app.config.ui_style();
-    let inner = panel(buf, rect, "Opening", &app.theme, style);
+    let inner = panel(buf, rect, "Opening", &app.theme);
     if inner.height < 3 {
         return;
     }
-    draw_body(buf, inner, &app.theme, loading, app.frame, style);
+    draw_body(buf, inner, &app.theme, loading, app.frame);
 }
 
-fn draw_body(
-    buf: &mut Buffer,
-    inner: Rect,
-    theme: &Theme,
-    loading: &Loading,
-    frame: u64,
-    style: UiStyle,
-) {
+fn draw_body(buf: &mut Buffer, inner: Rect, theme: &Theme, loading: &Loading, frame: u64) {
     let width = inner.width as usize;
 
     // Row 0: spinner, then the file's name.
@@ -97,28 +88,18 @@ fn draw_body(
     };
     let bar_w = width.saturating_sub(6);
     if bar_w >= 8 {
-        // The pixel style paints the track as a surface and the progress as a
-        // solid block on it, so the bar reads as a filled rectangle rather than
-        // as a run of shaded characters. The cell style keeps the shades: on a
-        // font where the block glyphs are dense, `░` is the clearer of the two.
-        let (filled, empty) = match style {
-            UiStyle::Pixel => ("█", " "),
-            UiStyle::Cell => ("█", "░"),
-        };
-        let empty_bg = if style == UiStyle::Pixel {
-            theme.border
-        } else {
-            theme.overlay_bg
-        };
-        for (i, done) in bar_cells(bar, bar_w, frame).iter().enumerate() {
-            let (glyph, fg, bg) = if *done {
-                (filled, theme.statusbar_accent, theme.overlay_bg)
+        for (i, filled) in bar_cells(bar, bar_w, frame).iter().enumerate() {
+            let (glyph, colour) = if *filled {
+                ("█", theme.statusbar_accent)
             } else {
-                (empty, theme.border, empty_bg)
+                ("░", theme.border)
             };
-            buf[(inner.x + i as u16, inner.y + 1)]
-                .set_symbol(glyph)
-                .set_style(Style::default().fg(fg).bg(bg));
+            buf.set_string(
+                inner.x + i as u16,
+                inner.y + 1,
+                glyph,
+                Style::default().fg(colour),
+            );
         }
         if let Bar::Fraction(f) = bar {
             buf.set_string(

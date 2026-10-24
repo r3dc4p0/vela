@@ -95,7 +95,6 @@ horizontally once the longest line ends.
 | `F1` | `help.show` | Help screen, generated from the live keymap |
 | `Ctrl+Shift+P` | `help.commandPalette` | Command palette |
 | `Ctrl+Shift+T` | `view.toggleTheme` | Dark / light |
-| `Ctrl+Shift+U` | `view.toggleUiStyle` | Pixel (hairline) / cell (block) chrome |
 | `Alt+Z` | `view.toggleWhitespace` | Show tabs, spaces and control characters |
 | `Alt+W` | `view.toggleWordWrap` | Wrap long lines at the window width |
 
@@ -105,14 +104,6 @@ in configuration with `[editor] word_wrap = true`. While wrapping is on there is
 nothing to scroll to horizontally, so the horizontal wheel does nothing; the
 vertical wheel and the cursor motions step by *rows*, not by lines, so a single
 wrapped line can fill the window and be scrolled through.
-
-`Ctrl+Shift+U` switches the chrome between the two drawing styles: `pixel`, the
-default, which draws borders and dividers as hairlines on the edge of a cell, and
-`cell`, which draws them as whole cells of `│` and `─`. It is a session setting
-too, and can be set in configuration with `[ui] style = "cell"` or per run with
-`vela --ui cell`. The hairlines under the bars use the terminal's underline
-colour (SGR 58); on a terminal that ignores it those rules take the colour of the
-text above them, which is a shade off but still a line.
 
 ## Terminal limitations (read this)
 

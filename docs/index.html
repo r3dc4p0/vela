@@ -304,7 +304,7 @@
   .term .tab.active {
     background: var(--panel);
     color: var(--fg);
-    box-shadow: inset 0 -1px 0 var(--gold);
+    box-shadow: inset 0 2px 0 var(--gold);
   }
 
   .term .code { padding: 10px 0 12px; }
@@ -831,11 +831,6 @@
           <h3>Undo you can trust</h3>
           <p>Transaction-based history with coalescing that restores cursor and selection. Replace-all, indent and trim are each one undo step.</p>
         </article>
-
-        <article class="card">
-          <h3>Hairlines, not boxes</h3>
-          <p>A border is drawn on the edge of a cell instead of in a whole one, so a rule costs a fraction of a row: 1px panels, tabs split by a hairline, a gold accent under the active tab. Prefer the old block chrome? <span class="inline-code">Ctrl+Shift+U</span>, or <span class="inline-code">--ui cell</span>.</p>
-        </article>
       </div>
     </div>
   </section>
@@ -877,7 +872,6 @@
         <div class="key-row"><span class="what">Close buffer</span><span class="combo"><kbd>Ctrl</kbd> <kbd>W</kbd></span></div>
         <div class="key-row"><span class="what">Word wrap</span><span class="combo"><kbd>Alt</kbd> <kbd>W</kbd></span></div>
         <div class="key-row"><span class="what">Show whitespace</span><span class="combo"><kbd>Alt</kbd> <kbd>Z</kbd></span></div>
-        <div class="key-row"><span class="what">UI style</span><span class="combo"><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>U</kbd></span></div>
         <div class="key-row"><span class="what">Help</span><span class="combo"><kbd>F1</kbd></span></div>
       </div>
     </div>

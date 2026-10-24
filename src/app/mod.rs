@@ -1019,11 +1019,6 @@ impl App {
             }
 
             Command::ToggleTheme => self.toggle_theme(),
-            Command::ToggleUiStyle => {
-                let next = self.config.ui_style().other();
-                self.config.ui.style = next.name().to_string();
-                self.info(format!("UI style: {}", next.name()));
-            }
             Command::ToggleLineNumbers => {
                 self.config.editor.line_numbers = !self.config.editor.line_numbers;
                 self.info(format!(

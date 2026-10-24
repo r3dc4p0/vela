@@ -21,7 +21,7 @@ use ratatui::Frame;
 
 use crate::buffer::motion::{char_width, visual_col_of};
 use crate::buffer::{Document, LayoutCache, LineLayout, Segment, TextStorage, WHOLE_LINE_LIMIT};
-use crate::config::{Config, UiStyle};
+use crate::config::Config;
 use crate::search::SearchState;
 use crate::syntax::{self, StateCache, Token};
 use crate::theme::Theme;
@@ -140,8 +140,6 @@ struct PaintCtx<'a> {
     text_x: u16,
     text_w: usize,
     left: usize,
-    /// Draw indent guides as a hairline rather than as a box-drawing column.
-    pixel: bool,
 }
 
 /// Paint one line into `row`. Returns the screen position of the cursor when it
@@ -604,7 +602,6 @@ impl EditorRenderer<'_> {
             text_x,
             text_w,
             left,
-            pixel: self.cfg.ui_style() == UiStyle::Pixel,
         };
 
         let lang = self.doc.language();
@@ -763,10 +760,7 @@ fn draw_indent_guides(
             if gx < area.x + area.width {
                 let cell = &mut buf[(gx, y)];
                 if cell.symbol() == " " {
-                    // A guide is a hint, not a rule: in the pixel style it is
-                    // the thinnest vertical the font has, which keeps the code
-                    // the only thing with real weight on the row.
-                    cell.set_symbol(if ctx.pixel { "▏" } else { "│" })
+                    cell.set_symbol("│")
                         .set_style(Style::default().fg(ctx.theme.indent_guide));
                 }
             }

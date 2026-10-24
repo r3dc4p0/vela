@@ -23,9 +23,6 @@ ratatui = { version = "0.30", default-features = false, features = [
     "crossterm",
     "std",
     "layout-cache",
-    # The pixel UI draws rules by underlining a row of text; without this the
-    # underline takes the text colour instead of the theme's hairline colour.
-    "underline-color",
 ] }
 crossterm = "0.29"
 

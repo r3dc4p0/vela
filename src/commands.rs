@@ -89,7 +89,6 @@ pub enum Command {
 
     // View
     ToggleTheme,
-    ToggleUiStyle,
     ToggleLineNumbers,
     ToggleRelativeNumbers,
     ToggleWhitespace,
@@ -149,7 +148,6 @@ impl Command {
         Command::ReplaceAll,
         Command::ClearSearch,
         Command::ToggleTheme,
-        Command::ToggleUiStyle,
         Command::ToggleLineNumbers,
         Command::ToggleRelativeNumbers,
         Command::ToggleWhitespace,
@@ -207,7 +205,6 @@ impl Command {
             Command::ReplaceAll => "search.replaceAll",
             Command::ClearSearch => "search.clear",
             Command::ToggleTheme => "view.toggleTheme",
-            Command::ToggleUiStyle => "view.toggleUiStyle",
             Command::ToggleLineNumbers => "view.toggleLineNumbers",
             Command::ToggleRelativeNumbers => "view.toggleRelativeNumbers",
             Command::ToggleWhitespace => "view.toggleWhitespace",
@@ -266,7 +263,6 @@ impl Command {
             Command::ReplaceAll => "Replace All",
             Command::ClearSearch => "Clear Search Highlights",
             Command::ToggleTheme => "Toggle Dark/Light Theme",
-            Command::ToggleUiStyle => "Toggle Pixel/Cell UI Style",
             Command::ToggleLineNumbers => "Toggle Line Numbers",
             Command::ToggleRelativeNumbers => "Toggle Relative Line Numbers",
             Command::ToggleWhitespace => "Toggle Visible Whitespace",
@@ -325,7 +321,6 @@ impl Command {
             | Command::ReplaceAll
             | Command::ClearSearch => Category::Search,
             Command::ToggleTheme
-            | Command::ToggleUiStyle
             | Command::ToggleLineNumbers
             | Command::ToggleRelativeNumbers
             | Command::ToggleWhitespace
@@ -382,7 +377,6 @@ impl Command {
             Command::AddCursorBelow => &["ctrl+alt+down"],
             Command::AddCursorToNextOccurrence => &["ctrl+d"],
             Command::ToggleTheme => &["ctrl+shift+t"],
-            Command::ToggleUiStyle => &["ctrl+shift+u"],
             Command::ToggleWhitespace => &["alt+z"],
             Command::ToggleWordWrap => &["alt+w"],
             Command::GotoBufferStart => &["ctrl+home"],
@@ -409,7 +403,6 @@ impl Command {
                 | Command::CommandPalette
                 | Command::Help
                 | Command::ToggleTheme
-                | Command::ToggleUiStyle
                 | Command::ToggleHints
                 | Command::ToggleLineNumbers
                 | Command::ToggleRelativeNumbers
@@ -441,7 +434,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 53);
+        assert_eq!(Command::ALL.len(), 52);
     }
 
     #[test]
