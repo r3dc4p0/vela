@@ -12,7 +12,7 @@ loses your work.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.5.0 │
+│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.5.1 │
 │ ▏ storage.rs ▏ mod.rs ●                                              │
 │  1 ▏ use std::ops::Range;                                            │
 │  2 ▏                                                                 │
