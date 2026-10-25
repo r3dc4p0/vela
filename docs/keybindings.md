@@ -99,6 +99,30 @@ horizontally once the longest line ends.
 | `Alt+Z` | `view.toggleWhitespace` | Show tabs, spaces and control characters |
 | `Alt+W` | `view.toggleWordWrap` | Wrap long lines at the window width |
 
+### Panes
+
+| Key | Command id | Action |
+| --- | --- | --- |
+| `Ctrl+\` | `view.splitPane` | Split the pane, showing the same buffer to its right |
+| `Ctrl+Alt+W` | `view.closePane` | Close the pane with the focus |
+| `Ctrl+Alt+Left` | `view.focusPaneLeft` | Focus the pane on the left (wraps) |
+| `Ctrl+Alt+Right` | `view.focusPaneRight` | Focus the pane on the right (wraps) |
+
+A split divides the editing area into columns; there is one column of hairline
+between each pair, drawn in the accent colour on the edge of the pane that has
+the focus. Clicking anywhere in a pane focuses it, including on that hairline.
+
+Panes are views, not buffers. Splitting shows the *same* buffer twice, at the
+same place, and the two scroll independently — which is the point: one file,
+two places in it. Loading another buffer into a pane (clicking its tab, `Ctrl+N`,
+or opening a file) gives the two panes different buffers, and an edit in either
+pane of a shared buffer appears in both, because there is only ever one
+document.
+
+A pane closes with `Ctrl+Alt+W`; the last one cannot be closed. A split is
+refused when the panes would be narrower than 24 columns, and says so rather
+than drawing something unreadable.
+
 Word wrap is a session setting rather than a per-buffer one: the wrap width is a
 property of the window, so toggling it affects every buffer. It can also be set
 in configuration with `[editor] word_wrap = true`. While wrapping is on there is

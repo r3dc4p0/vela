@@ -159,7 +159,7 @@ impl App {
             .iter()
             .position(|b| b.path().map(|p| same_file(p, &path)).unwrap_or(false))
         {
-            self.active = idx;
+            self.set_active_buffer(idx);
             self.info(format!("{} is already open", path.display()));
             return;
         }
@@ -214,9 +214,11 @@ impl App {
                     && self.buffers[0].len_chars() == 0;
                 if replace_blank {
                     self.buffers.clear();
+                    self.panes.clear();
                 }
                 self.buffers.push(doc);
-                self.active = self.buffers.len() - 1;
+                self.ensure_panes();
+                self.set_active_buffer(self.buffers.len() - 1);
                 self.search.clear();
                 self.info(format!("New file {}", path.display()));
             }
@@ -237,10 +239,12 @@ impl App {
             && self.buffers[0].len_chars() == 0;
         if replace_blank {
             self.buffers.clear();
+            self.panes.clear();
         }
 
         self.buffers.push(opened.document);
-        self.active = self.buffers.len() - 1;
+        self.ensure_panes();
+        self.set_active_buffer(self.buffers.len() - 1);
         self.add_recent(&path);
         self.search.clear();
 
@@ -248,7 +252,7 @@ impl App {
             self.warn(format!(
                 "{} had mixed line endings; normalised to {}",
                 path.display(),
-                self.buffers[self.active].eol().label()
+                self.buffers[self.active()].eol().label()
             ));
         }
     }
@@ -264,7 +268,7 @@ impl App {
 
     pub fn new_buffer(&mut self) {
         self.buffers.push(Document::untitled());
-        self.active = self.buffers.len() - 1;
+        self.set_active_buffer(self.buffers.len() - 1);
         self.search.clear();
         self.info("New buffer");
     }
@@ -306,17 +310,15 @@ impl App {
         self.syntax_cache.remove(&id);
         self.buffers.remove(idx);
 
+        self.after_buffer_removed(idx);
         if self.buffers.is_empty() {
             if self.quit_pending {
                 self.running = false;
             } else {
                 self.buffers.push(Document::untitled());
-                self.active = 0;
+                self.panes.clear();
+                self.ensure_panes();
             }
-        } else if self.active > idx {
-            self.active -= 1;
-        } else if self.active >= self.buffers.len() {
-            self.active = self.buffers.len() - 1;
         }
         self.search.clear();
         self.brackets_cache_reset();
@@ -324,10 +326,10 @@ impl App {
 
     /// Switch to the buffer at `idx`, used by clicking its tab.
     pub fn focus_buffer(&mut self, idx: usize) {
-        if idx >= self.buffers.len() || idx == self.active {
+        if idx >= self.buffers.len() || idx == self.active() {
             return;
         }
-        self.active = idx;
+        self.set_active_buffer(idx);
         self.search.clear();
         self.brackets_cache_reset();
     }
@@ -337,14 +339,14 @@ impl App {
             return;
         }
         let len = self.buffers.len() as isize;
-        let mut next = self.active as isize + delta;
+        let mut next = self.active() as isize + delta;
         if next < 0 {
             next += len;
         }
         if next >= len {
             next -= len;
         }
-        self.active = next as usize;
+        self.set_active_buffer(next as usize);
         self.search.clear();
         self.brackets_cache_reset();
     }

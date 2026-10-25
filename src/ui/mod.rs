@@ -277,9 +277,40 @@ impl UiState {
 struct Layout {
     topbar: Option<Rect>,
     tabs: Option<Rect>,
-    editor: Rect,
+    /// One rect per pane, in pane order. Always `app.pane_count()` long, so an
+    /// index into it is an index into `app.panes`; a pane too narrow to show
+    /// gets a zero-width rect rather than disappearing from the list.
+    panes: Vec<Rect>,
     status: Option<Rect>,
     hints: Option<Rect>,
+}
+
+/// Divide the editing area into `count` columns, one column of divider between
+/// each pair.
+///
+/// The remainder of the division is handed out one column at a time to the
+/// leftmost panes, so two panes of an odd width differ by one column instead of
+/// leaving a gap at the right edge.
+fn split_columns(area: Rect, count: usize) -> Vec<Rect> {
+    if count <= 1 {
+        return vec![area];
+    }
+    let dividers = count as u16 - 1;
+    let usable = area.width.saturating_sub(dividers);
+    let base = usable / count as u16;
+    let mut extra = usable % count as u16;
+    let mut x = area.x;
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        let mut width = base;
+        if extra > 0 {
+            width += 1;
+            extra -= 1;
+        }
+        out.push(Rect::new(x, area.y, width, area.height));
+        x += width + 1;
+    }
+    out
 }
 
 fn layout(area: Rect, app: &App) -> Layout {
@@ -332,6 +363,7 @@ fn layout(area: Rect, app: &App) -> Layout {
         None
     };
     let editor = Rect::new(area.x, y, area.width, editor_h);
+    let panes = split_columns(editor, app.pane_count().max(1));
     y += editor_h;
     let status_rect = if status > 0 {
         let r = Rect::new(area.x, y, area.width, 1);
@@ -349,7 +381,7 @@ fn layout(area: Rect, app: &App) -> Layout {
     Layout {
         topbar,
         tabs: tabs_rect,
-        editor,
+        panes,
         status: status_rect,
         hints: hints_rect,
     }
@@ -369,8 +401,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let l = layout(area, app);
     // Mouse hit-testing and the page size both need the rect the editor was
     // actually given; only the draw pass knows it. Same for the tab strip,
-    // which is clickable.
-    app.set_editor_area(l.editor);
+    // which is clickable. Every pane remembers its own rect, and the active
+    // one's is what the motions and the pointer mapping work against.
+    for (i, rect) in l.panes.iter().enumerate() {
+        if let Some(pane) = app.panes.get_mut(i) {
+            pane.rect = *rect;
+        }
+    }
+    app.set_editor_area(l.panes.get(app.active_pane).copied().unwrap_or_default());
     app.set_tabs_area(l.tabs.unwrap_or_default());
 
     if let Some(r) = l.topbar {
@@ -380,7 +418,25 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         chrome::draw_tabs(frame.buffer_mut(), r, app);
     }
 
-    draw_editor(frame, l.editor, app);
+    // The active pane is drawn first, and without its stored viewport being
+    // installed over the document: between frames the document is the fresher
+    // of the two, because that is where motions and the wheel put the scroll.
+    // The other panes are the opposite — their document may be showing another
+    // pane's position, or another buffer's — so they hand theirs over first.
+    let active = app.active_pane.min(l.panes.len().saturating_sub(1));
+    if !l.panes.is_empty() {
+        draw_pane(frame, l.panes[active], app, active, false);
+    }
+    for pane in 0..l.panes.len() {
+        if pane != active {
+            draw_pane(frame, l.panes[pane], app, pane, true);
+        }
+    }
+    chrome::draw_pane_dividers(frame.buffer_mut(), &l.panes, app);
+    // Leave the active pane's viewport installed in its document: everything
+    // after the draw — the status bar, the next keystroke — reads it from
+    // there.
+    app.install_active_view();
 
     if let Some(r) = l.status {
         chrome::draw_status(frame.buffer_mut(), r, app);
@@ -389,26 +445,52 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         chrome::draw_hints(frame.buffer_mut(), r, app);
     }
 
+    let span = app.editor_span();
+
     // Notifications float over the bottom of the editing area, never over the
     // status bar or the hint bar: those carry information the user is reading.
-    chrome::draw_messages(frame.buffer_mut(), l.editor, app);
+    chrome::draw_messages(frame.buffer_mut(), span, app);
 
     // A file still being opened gets the middle of the editing area, under any
     // overlay the user has opened since.
-    loading::draw(frame.buffer_mut(), l.editor, app);
+    loading::draw(frame.buffer_mut(), span, app);
 
     if let Some((x, y)) = overlays::draw(frame, app) {
         frame.set_cursor_position((x, y));
     }
 }
 
-fn draw_editor(frame: &mut Frame, area: Rect, app: &mut App) {
-    let Some(idx) = app.active_index() else {
+/// Render one pane.
+///
+/// The viewport is handed over and taken back around the call: the renderer
+/// works by adjusting the document's scroll fields, and two panes on one buffer
+/// must not share them. `install` is false for the active pane, whose document
+/// already holds the live viewport.
+fn draw_pane(frame: &mut Frame, area: Rect, app: &mut App, pane: usize, install: bool) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let Some(entry) = app.panes.get(pane).copied() else {
         return;
     };
-    let brackets = app.brackets_for_active();
-    let doc_id = app.buffers[idx].id();
+    let idx = entry.buffer;
+    if idx >= app.buffers.len() {
+        return;
+    }
 
+    if install {
+        let doc = &mut app.buffers[idx];
+        doc.set_view_top(entry.top, entry.row);
+        doc.set_scroll_left(entry.left);
+        if entry.detached {
+            doc.detach_view();
+        } else {
+            doc.attach_view();
+        }
+    }
+
+    let brackets = app.brackets_for(idx);
+    let doc_id = app.buffers[idx].id();
     let cache = app.syntax_cache.entry(doc_id).or_default();
 
     let mut renderer = editor::EditorRenderer {
@@ -418,9 +500,11 @@ fn draw_editor(frame: &mut Frame, area: Rect, app: &mut App) {
         search: &app.search,
         brackets,
         cache,
-        focused: app.ui.overlay.is_none(),
+        focused: pane == app.active_pane && app.ui.overlay.is_none(),
     };
     renderer.render(frame, area);
+
+    app.harvest_view(pane);
 }
 
 /// Convenience for tests: render an app into a test backend and return the

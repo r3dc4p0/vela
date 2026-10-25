@@ -88,6 +88,10 @@ pub enum Command {
     ClearSearch,
 
     // View
+    SplitPane,
+    ClosePane,
+    FocusPaneLeft,
+    FocusPaneRight,
     ToggleTheme,
     ToggleUiStyle,
     ToggleLineNumbers,
@@ -148,6 +152,10 @@ impl Command {
         Command::ReplaceOne,
         Command::ReplaceAll,
         Command::ClearSearch,
+        Command::SplitPane,
+        Command::ClosePane,
+        Command::FocusPaneLeft,
+        Command::FocusPaneRight,
         Command::ToggleTheme,
         Command::ToggleUiStyle,
         Command::ToggleLineNumbers,
@@ -206,6 +214,10 @@ impl Command {
             Command::ReplaceOne => "search.replaceOne",
             Command::ReplaceAll => "search.replaceAll",
             Command::ClearSearch => "search.clear",
+            Command::SplitPane => "view.splitPane",
+            Command::ClosePane => "view.closePane",
+            Command::FocusPaneLeft => "view.focusPaneLeft",
+            Command::FocusPaneRight => "view.focusPaneRight",
             Command::ToggleTheme => "view.toggleTheme",
             Command::ToggleUiStyle => "view.toggleUiStyle",
             Command::ToggleLineNumbers => "view.toggleLineNumbers",
@@ -265,6 +277,10 @@ impl Command {
             Command::ReplaceOne => "Replace",
             Command::ReplaceAll => "Replace All",
             Command::ClearSearch => "Clear Search Highlights",
+            Command::SplitPane => "Split Pane Right",
+            Command::ClosePane => "Close Pane",
+            Command::FocusPaneLeft => "Focus Pane Left",
+            Command::FocusPaneRight => "Focus Pane Right",
             Command::ToggleTheme => "Toggle Dark/Light Theme",
             Command::ToggleUiStyle => "Toggle Pixel/Cell UI Style",
             Command::ToggleLineNumbers => "Toggle Line Numbers",
@@ -324,7 +340,11 @@ impl Command {
             | Command::ReplaceOne
             | Command::ReplaceAll
             | Command::ClearSearch => Category::Search,
-            Command::ToggleTheme
+            Command::SplitPane
+            | Command::ClosePane
+            | Command::FocusPaneLeft
+            | Command::FocusPaneRight
+            | Command::ToggleTheme
             | Command::ToggleUiStyle
             | Command::ToggleLineNumbers
             | Command::ToggleRelativeNumbers
@@ -381,6 +401,10 @@ impl Command {
             Command::AddCursorAbove => &["ctrl+alt+up"],
             Command::AddCursorBelow => &["ctrl+alt+down"],
             Command::AddCursorToNextOccurrence => &["ctrl+d"],
+            Command::SplitPane => &["ctrl+\\"],
+            Command::ClosePane => &["ctrl+alt+w"],
+            Command::FocusPaneLeft => &["ctrl+alt+left"],
+            Command::FocusPaneRight => &["ctrl+alt+right"],
             Command::ToggleTheme => &["ctrl+shift+t"],
             Command::ToggleUiStyle => &["ctrl+shift+u"],
             Command::ToggleWhitespace => &["alt+z"],
@@ -408,6 +432,8 @@ impl Command {
                 | Command::QuitAll
                 | Command::CommandPalette
                 | Command::Help
+                | Command::SplitPane
+                | Command::ClosePane
                 | Command::ToggleTheme
                 | Command::ToggleUiStyle
                 | Command::ToggleHints
@@ -441,7 +467,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 53);
+        assert_eq!(Command::ALL.len(), 57);
     }
 
     #[test]

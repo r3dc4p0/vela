@@ -11,6 +11,7 @@
 //! Nothing in here knows about rendering details; `ui::draw` reads this state.
 
 mod files;
+mod panes;
 mod prompts;
 
 use std::collections::HashMap;
@@ -37,6 +38,7 @@ use crate::theme::Theme;
 use crate::ui::{self, Confirm, ConfirmAction, Level, Message, Overlay, PathPrompt, UiState};
 
 pub use files::{Loading, OpenedBuffer, LOADER_DELAY};
+pub use panes::{Pane, MIN_PANE_WIDTH};
 
 /// Work handed to a background thread.
 pub enum Job {
@@ -67,7 +69,9 @@ const ASYNC_OPEN_THRESHOLD: u64 = 4 * 1024 * 1024;
 /// Main application object.
 pub struct App {
     pub buffers: Vec<Document>,
-    pub active: usize,
+    /// The views onto those buffers. Always non-empty; `active_pane` indexes it.
+    pub panes: Vec<Pane>,
+    pub active_pane: usize,
     pub config: Config,
     pub theme: Theme,
     pub keymap: Keymap,
@@ -147,6 +151,8 @@ impl App {
             app.buffers.push(Document::untitled());
         }
 
+        app.ensure_panes();
+
         // Surface configuration problems without blocking startup.
         let warnings = app.config_warnings.clone();
         for w in warnings {
@@ -167,6 +173,7 @@ impl App {
         app.cwd = cwd;
         app.clipboard = Clipboard::internal_only();
         app.buffers.push(Document::untitled());
+        app.ensure_panes();
         app
     }
 
@@ -181,7 +188,8 @@ impl App {
 
         let mut app = Self {
             buffers: Vec::new(),
-            active: 0,
+            panes: Vec::new(),
+            active_pane: 0,
             config,
             theme,
             keymap: Keymap::defaults(),
@@ -230,7 +238,7 @@ impl App {
         if self.buffers.is_empty() {
             None
         } else {
-            Some(self.active.min(self.buffers.len() - 1))
+            Some(self.active())
         }
     }
 
@@ -481,6 +489,9 @@ impl App {
                     self.click_tab(mouse.column, mouse.row);
                     return;
                 }
+                // A click belongs to the pane it lands in, so the focus follows
+                // the pointer before the coordinates are mapped.
+                self.focus_pane_at(mouse.column, mouse.row);
                 // Alt+Click extends the caret set instead of moving the cursor.
                 if mouse.modifiers.contains(KeyModifiers::ALT) {
                     self.alt_click_at(mouse.column, mouse.row);
@@ -1015,6 +1026,14 @@ impl App {
                 self.info("Search cleared");
             }
 
+            Command::SplitPane => {
+                self.split_pane();
+            }
+            Command::ClosePane => {
+                self.close_pane();
+            }
+            Command::FocusPaneLeft => self.focus_pane_step(-1),
+            Command::FocusPaneRight => self.focus_pane_step(1),
             Command::ToggleTheme => self.toggle_theme(),
             Command::ToggleUiStyle => {
                 let next = self.config.ui_style().other();
@@ -1318,10 +1337,18 @@ impl App {
 
     /// Bracket pair to highlight for the active buffer, cached per revision.
     pub fn brackets_for_active(&mut self) -> Option<(usize, usize)> {
+        let idx = self.active_index()?;
+        self.brackets_for(idx)
+    }
+
+    /// Bracket pair to highlight for the buffer at `idx`, cached per revision.
+    ///
+    /// Each pane asks for its own buffer, so the cache is keyed by document id
+    /// rather than by "the active one".
+    pub fn brackets_for(&mut self, idx: usize) -> Option<(usize, usize)> {
         if !self.config.editor.match_brackets {
             return None;
         }
-        let idx = self.active_index()?;
         let doc = &self.buffers[idx];
         let id = doc.id();
         let revision = doc.revision();

@@ -240,7 +240,7 @@ fn the_divider_belongs_to_the_tab_it_precedes() {
             modifiers: crossterm::event::KeyModifiers::NONE,
         },
     ));
-    assert_eq!(app.active, 1, "the divider belongs to its tab");
+    assert_eq!(app.active(), 1, "the divider belongs to its tab");
 }
 
 #[test]

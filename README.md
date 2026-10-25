@@ -49,6 +49,12 @@ it can look anywhere in the buffer; when the cursor leaves the screen the
 status bar keeps reporting its line, in amber. `Alt+Click` adds a cursor.
 Disable the lot with `mouse = false`.
 
+**Panes** — `Ctrl+\` splits the editing area and shows the same file twice, at
+two places in it, scrolling independently. `Ctrl+Alt+Left`/`Right` moves between
+panes and a click focuses the one under the pointer; `Ctrl+Alt+W` closes it. Load
+another buffer into a pane and you have two files side by side. Edits are shared
+because there is only ever one document.
+
 **Look** — the chrome is drawn the way the design on the website is drawn: a
 border is a fraction of a cell rather than a whole one, so panels are framed by
 hairlines on the edge of their rows, tabs are split by a rule, and the

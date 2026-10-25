@@ -133,11 +133,11 @@ fn dragging_past_the_bottom_edge_autoscrolls() {
     let (editor, _) = frame(&mut app, 80, 12);
     let g = gutter(&app);
 
-    let before = app.buffers[app.active].scroll_top();
+    let before = app.buffers[app.active()].scroll_top();
     press(&mut app, editor.x + g, editor.y);
     drag(&mut app, editor.x + g, editor.y + editor.height + 5);
 
-    let doc = &app.buffers[app.active];
+    let doc = &app.buffers[app.active()];
     assert!(
         doc.scroll_top() > before,
         "dragging below the text scrolls the buffer"
@@ -183,9 +183,9 @@ fn wheel_scrolls_the_buffer() {
     let _ = frame(&mut app, 80, 12);
 
     send(&mut app, MouseEventKind::ScrollDown, 10, 5);
-    assert_eq!(app.buffers[app.active].scroll_top(), 3);
+    assert_eq!(app.buffers[app.active()].scroll_top(), 3);
     send(&mut app, MouseEventKind::ScrollUp, 10, 5);
-    assert_eq!(app.buffers[app.active].scroll_top(), 0);
+    assert_eq!(app.buffers[app.active()].scroll_top(), 0);
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn clicking_a_tab_switches_buffers() {
     let mut app = editor(scratch.path());
     open(&mut app, &a);
     open(&mut app, &b);
-    assert_eq!(app.active, 1, "the last opened buffer is active");
+    assert_eq!(app.active(), 1, "the last opened buffer is active");
 
     let (_, tabs) = frame(&mut app, 80, 24);
     assert!(tabs.height > 0, "tabs are shown for two buffers");
@@ -204,10 +204,10 @@ fn clicking_a_tab_switches_buffers() {
     assert_eq!(spans.len(), 2);
 
     click(&mut app, spans[0].x + 1, tabs.y);
-    assert_eq!(app.active, 0, "clicking the first tab focuses it");
+    assert_eq!(app.active(), 0, "clicking the first tab focuses it");
 
     click(&mut app, spans[1].x + 1, tabs.y);
-    assert_eq!(app.active, 1, "clicking the second tab focuses it");
+    assert_eq!(app.active(), 1, "clicking the second tab focuses it");
 }
 
 #[test]

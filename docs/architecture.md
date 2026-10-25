@@ -306,6 +306,45 @@ instead cost eight seconds on an eighteen-million-line file, so the bound is
 deliberately local: it is re-measured every frame, which twenty rows can afford,
 and it never learns about text the user cannot see.
 
+### Panes are views, not buffers
+
+A pane is `{ buffer, top, row, left, detached, rect }` — which buffer, where in
+it, and the rectangle it was given. The buffer itself stays in `App::buffers`,
+so two panes on one file are two windows onto one document: an edit in either
+shows in both, because there is only one copy of the text and one cursor.
+
+That is what makes the viewport the interesting part. `Document` still owns
+`scroll_top`, `scroll_row`, `scroll_left` and `view_detached`, because the
+renderer and every motion work by adjusting them — but they are now a *staging
+area* for whichever pane is being drawn. `ui::draw` installs a pane's viewport
+into its document before rendering it and harvests it back afterwards, so two
+panes on one buffer do not fight over one set of offsets.
+
+Two details make that hand-off sound:
+
+- **The active pane is drawn first, and its stored viewport is not installed
+  over the document.** Between frames the document is the fresher of the two:
+  that is where the wheel and the motions put the scroll. Every other pane is
+  the opposite — its document may be showing another pane's position, or
+  another buffer's — so it hands its viewport over first.
+- **The focus change harvests before it installs.** `focus_pane` copies the
+  document's viewport into the pane being left before installing the new one,
+  so a motion that has not been drawn yet is not lost.
+
+After the panes are drawn, the active pane's viewport is installed once more, so
+everything that runs between frames — the status bar's "the cursor is off
+screen" arrow, the next keystroke — reads the right numbers.
+
+`App::active` is derived from the active pane rather than stored: it used to be
+a field kept in step with the buffer list, and a pane model would have made that
+a second source of truth for the same fact.
+
+The layout divides the editing area into columns with one column of hairline
+between each pair, and publishes every pane's rect back into the pane — the same
+"hit-testing reads the last frame" rule the tab strip follows. A click lands in
+the pane it is over, and the divider column belongs to the pane it introduces,
+which is also the pane whose edge carries the accent colour.
+
 ### Word wrap is one function, and everyone calls it
 
 Wrapping looks like a rendering detail and is not: the renderer decides where a
@@ -385,6 +424,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| Panes | `tests/split.rs`: two panes of equal width with a divider between them, one buffer at two scroll positions, an edit visible in both panes, two buffers in two panes, click-to-focus, closing a pane and the refusal to close the last one, a closed buffer leaving no dangling pane index, and a split refused when the panes would be too narrow |
 | Drawing styles | `tests/ui_style.rs`: both styles render the same words, the pixel style frames panels in hairlines where the block style boxes them, a title breaks its own rule, no row is spent on a border and no bar is underlined, and the toggle is announced |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |
 | Performance | `benches/core_bench.rs` (Criterion) |

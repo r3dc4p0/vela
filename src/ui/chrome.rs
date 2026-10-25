@@ -291,7 +291,7 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
     let spans = tab_spans(app, area);
     let mut x = area.x;
     for span in &spans {
-        let active = span.buffer == app.active;
+        let active = span.buffer == app.active();
         buf.set_string(
             span.x,
             area.y,
@@ -323,6 +323,33 @@ pub fn draw_tabs(buf: &mut Buffer, area: Rect, app: &App) {
             format!(" +{hidden} "),
             Style::default().fg(theme.dim).bg(theme.tab_inactive_bg),
         );
+    }
+}
+
+/// The columns between panes.
+///
+/// One column each, drawn full height. The divider belongs to the pane on its
+/// right — the same rule the tab strip follows — so the pane with the focus
+/// carries the accent on its leading edge, and a click on the divider lands in
+/// the pane it introduces.
+pub fn draw_pane_dividers(buf: &mut Buffer, panes: &[Rect], app: &App) {
+    if panes.len() < 2 {
+        return;
+    }
+    let theme = &app.theme;
+    let deco = Deco::for_app(app);
+    let glyph = if deco.hairline_panels { "▏" } else { "│" };
+    for (i, pane) in panes.iter().enumerate().skip(1) {
+        let x = pane.x.saturating_sub(1);
+        let colour = if i == app.active_pane {
+            theme.mark
+        } else {
+            theme.line
+        };
+        let style = Style::default().fg(colour).bg(theme.bg);
+        for y in pane.y..pane.y + pane.height {
+            buf.set_string(x, y, glyph, style);
+        }
     }
 }
 
@@ -386,6 +413,15 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
         doc.encoding().label().to_string(),
         theme.statusbar_fg,
     );
+    if app.pane_count() > 1 {
+        add_segment(
+            &mut left,
+            sep,
+            sep_colour,
+            format!("pane {}/{}", app.active_pane + 1, app.pane_count()),
+            theme.statusbar_accent,
+        );
+    }
     if doc.externally_modified() {
         add_segment(
             &mut left,
