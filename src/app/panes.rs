@@ -255,18 +255,82 @@ impl App {
         }
     }
 
+    /// Text columns a pane has to work with.
+    fn pane_text_width(&self, pane: usize) -> usize {
+        let Some(entry) = self.panes.get(pane) else {
+            return 0;
+        };
+        let Some(doc) = self.buffers.get(entry.buffer) else {
+            return 0;
+        };
+        (entry.rect.width as usize).saturating_sub(self.gutter_width(doc) as usize)
+    }
+
+    /// The wheel scrolls the pane it is over, not the one with the keyboard.
+    ///
+    /// Focus does not move: scrolling is looking, and stealing the keyboard
+    /// from the pane being typed in because the pointer drifted over its
+    /// neighbour would be worse than the bug this fixes.
+    pub fn wheel_vertical_at(&mut self, column: u16, row: u16, delta: isize) {
+        let Some(pane) = self.pane_at(column, row) else {
+            return self.scroll_by(delta);
+        };
+        if pane == self.active_pane {
+            return self.scroll_by(delta);
+        }
+        let Some(entry) = self.panes.get(pane).copied() else {
+            return;
+        };
+        let wrap = if self.config.editor.word_wrap {
+            let width = self.pane_text_width(pane);
+            (width > 0).then_some(width)
+        } else {
+            None
+        };
+        self.install_view(pane);
+        self.scroll_vertical(entry.buffer, wrap, delta);
+        self.harvest_view(pane);
+        self.install_active_view();
+    }
+
+    /// The horizontal wheel, on the pane it is over.
+    pub fn wheel_horizontal_at(&mut self, column: u16, row: u16, delta: isize) {
+        let Some(pane) = self.pane_at(column, row) else {
+            return self.scroll_sideways(delta);
+        };
+        if pane == self.active_pane {
+            return self.scroll_sideways(delta);
+        }
+        if self.config.editor.word_wrap {
+            return;
+        }
+        let Some(entry) = self.panes.get(pane).copied() else {
+            return;
+        };
+        let width = self.pane_text_width(pane);
+        self.install_view(pane);
+        self.scroll_horizontal(entry.buffer, width, delta);
+        self.harvest_view(pane);
+        self.install_active_view();
+    }
+
     /// Copy the active pane's viewport into its document.
     ///
     /// The draw pass does this for every pane before rendering it; this is the
     /// same thing for the code that runs between frames.
     pub fn install_active_view(&mut self) {
-        let Some(pane) = self.panes.get(self.active_pane).copied() else {
+        self.install_view(self.active_pane);
+    }
+
+    /// Copy one pane's viewport into the document it shows.
+    pub fn install_view(&mut self, pane: usize) {
+        let Some(entry) = self.panes.get(pane).copied() else {
             return;
         };
-        if let Some(doc) = self.buffers.get_mut(pane.buffer) {
-            doc.set_view_top(pane.top, pane.row);
-            doc.set_scroll_left(pane.left);
-            if pane.detached {
+        if let Some(doc) = self.buffers.get_mut(entry.buffer) {
+            doc.set_view_top(entry.top, entry.row);
+            doc.set_scroll_left(entry.left);
+            if entry.detached {
                 doc.detach_view();
             } else {
                 doc.attach_view();

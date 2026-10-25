@@ -436,7 +436,18 @@ pub struct EditorRenderer<'a> {
     pub search: &'a SearchState,
     pub brackets: Option<(usize, usize)>,
     pub cache: &'a mut StateCache,
+    /// Draw the caret, the cursor line and the secondary carets here.
+    ///
+    /// False for every pane but the active one, and false while an overlay owns
+    /// the terminal cursor.
     pub focused: bool,
+    /// Let the viewport follow the cursor.
+    ///
+    /// True only for the pane the cursor belongs to. An inactive pane shows the
+    /// same buffer from wherever it was left: if it re-derived its top from the
+    /// cursor every frame, moving the cursor in one pane would drag the other
+    /// along, and the two views could never hold different positions.
+    pub follows_cursor: bool,
 }
 
 impl EditorRenderer<'_> {
@@ -479,7 +490,7 @@ impl EditorRenderer<'_> {
         // so wrapping changes where a row comes from but not the rule: keep the
         // cursor's row between `scroll_off` and the bottom edge.
         let scroll_off = self.cfg.editor.scroll_off.min(rows.saturating_sub(1) / 2);
-        let following = !self.doc.view_detached();
+        let following = self.follows_cursor && !self.doc.view_detached();
         let (top, sub, left, visible) = {
             let storage = self.doc.storage();
             let mut cache = LayoutCache::new(wrap_width, tab_width);
@@ -608,7 +619,9 @@ impl EditorRenderer<'_> {
             show_ws: self.cfg.editor.show_whitespace,
             show_guides: self.cfg.editor.show_indent_guides,
             cursor: self.doc.cursor(),
-            extra_cursors: &extra_positions,
+            // The document's carets are the cursor's, so they are drawn once,
+            // in the pane that owns it.
+            extra_cursors: if self.focused { &extra_positions } else { &[] },
             cur_line,
             text_x,
             text_w,
@@ -743,7 +756,7 @@ impl EditorRenderer<'_> {
             }
         }
 
-        if let Some(pos) = cursor_pos {
+        if let (Some(pos), true) = (cursor_pos, self.focused) {
             frame.set_cursor_position(pos);
         }
     }
@@ -832,6 +845,7 @@ mod tests {
                     brackets: None,
                     cache: &mut cache,
                     focused: true,
+                    follows_cursor: true,
                 };
                 r.render(frame, area);
             })

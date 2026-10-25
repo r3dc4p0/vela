@@ -335,6 +335,26 @@ After the panes are drawn, the active pane's viewport is installed once more, so
 everything that runs between frames — the status bar's "the cursor is off
 screen" arrow, the next keystroke — reads the right numbers.
 
+**The cursor belongs to the document; the viewport belongs to the pane.** Two
+flags keep that boundary, and both are needed because "the active pane" and
+"the pane being painted" are not the same question:
+
+- `follows_cursor` — true only for the active pane. An inactive pane renders at
+  exactly the viewport it was left at, never re-deriving it from the cursor. If
+  it did, moving the cursor in one pane would drag every other pane on the same
+  buffer along with it, and two views could never hold different positions.
+- `focused` — true for the active pane *and* only while no overlay is open.
+  This is what draws the caret, the cursor line and the secondary carets. The
+  caret is the terminal's cursor, not a cell, so it is set once per frame by
+  whichever pane draws last: an inactive pane that placed it would appear to
+  own the cursor.
+
+The wheel follows the pointer rather than the keyboard: `wheel_vertical_at`
+installs the pane under the pointer's viewport, scrolls that document at that
+pane's width, harvests it back and restores the active one. Focus does not
+move — scrolling is looking, and stealing the keyboard because the pointer
+drifted would be worse than the bug it fixes.
+
 `App::active` is derived from the active pane rather than stored: it used to be
 a field kept in step with the buffer list, and a pane model would have made that
 a second source of truth for the same fact.

@@ -479,10 +479,10 @@ impl App {
             return;
         }
         match mouse.kind {
-            MouseEventKind::ScrollUp => self.scroll_by(-3),
-            MouseEventKind::ScrollDown => self.scroll_by(3),
-            MouseEventKind::ScrollLeft => self.scroll_sideways(-4),
-            MouseEventKind::ScrollRight => self.scroll_sideways(4),
+            MouseEventKind::ScrollUp => self.wheel_vertical_at(mouse.column, mouse.row, -3),
+            MouseEventKind::ScrollDown => self.wheel_vertical_at(mouse.column, mouse.row, 3),
+            MouseEventKind::ScrollLeft => self.wheel_horizontal_at(mouse.column, mouse.row, -4),
+            MouseEventKind::ScrollRight => self.wheel_horizontal_at(mouse.column, mouse.row, 4),
             MouseEventKind::Down(MouseButton::Left) => {
                 // The tab strip is chrome, so it is tested before the text.
                 if self.tab_at(mouse.column, mouse.row).is_some() {
@@ -775,6 +775,14 @@ impl App {
             return;
         };
         let wrap = self.wrap_width();
+        self.scroll_vertical(idx, wrap, delta);
+    }
+
+    /// Vertical scroll of one document, at a given wrap width.
+    ///
+    /// Split from [`scroll_by`](Self::scroll_by) so the wheel can move a pane
+    /// that does not have the focus, at *that* pane's width.
+    fn scroll_vertical(&mut self, idx: usize, wrap: Option<usize>, delta: isize) {
         let tab_width = self.config.tab_width();
         let rows = self.buffers[idx].viewport_rows().max(1);
         let doc = &mut self.buffers[idx];
@@ -811,8 +819,13 @@ impl App {
         let Some(idx) = self.active_index() else {
             return;
         };
-        let tab_width = self.config.tab_width();
         let text_width = self.text_width();
+        self.scroll_horizontal(idx, text_width, delta);
+    }
+
+    /// Horizontal scroll of one document, in a text area `text_width` wide.
+    fn scroll_horizontal(&mut self, idx: usize, text_width: usize, delta: isize) {
+        let tab_width = self.config.tab_width();
         let doc = &mut self.buffers[idx];
         let rows = doc.viewport_rows();
         let limit = doc

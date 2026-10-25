@@ -453,3 +453,242 @@ fn the_pane_layout_round_trips_through_a_frame() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Two panes on one buffer: the cursor belongs to the document, the viewport
+// belongs to the pane. These pin down the boundary between the two.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_other_pane_does_not_chase_the_cursor() {
+    // The cursor is shared — one document — but the viewport is not. Moving the
+    // cursor must not drag the pane the cursor is not in.
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+
+    // The right pane has the focus: walk the cursor down out of the left pane's
+    // view, which starts at line 1.
+    for _ in 0..60 {
+        press(&mut app, KeyCode::Down, KeyModifiers::NONE);
+    }
+    let left = pane_rows(&mut app, 80, 24, 0);
+    let right = pane_rows(&mut app, 80, 24, 1);
+
+    assert_eq!(app.panes[0].top, 0, "the unfocused pane stayed at the top");
+    assert!(
+        left[0].contains("line 1"),
+        "and still shows it: {:?}",
+        left[0]
+    );
+    assert!(
+        !right[0].contains("line 1"),
+        "while the focused one followed the cursor: {:?}",
+        right[0]
+    );
+}
+
+#[test]
+fn scrolling_the_focused_pane_leaves_the_other_alone() {
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+
+    wheel(&mut app, MouseEventKind::ScrollDown);
+    wheel(&mut app, MouseEventKind::ScrollDown);
+    let _ = screen(&mut app, 80, 24);
+
+    assert_eq!(app.panes[0].top, 0, "the left pane did not move");
+    assert!(app.panes[1].top > 0, "the right one did");
+}
+
+#[test]
+fn focus_moves_do_not_move_either_view() {
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+
+    wheel(&mut app, MouseEventKind::ScrollDown);
+    let _ = screen(&mut app, 80, 24);
+    let right_top = app.panes[1].top;
+    assert!(right_top > 0);
+
+    app.execute(Command::FocusPaneLeft);
+    let _ = screen(&mut app, 80, 24);
+    assert_eq!(app.panes[1].top, right_top, "leaving did not move it");
+    assert_eq!(app.panes[0].top, 0, "and the left pane stayed put too");
+
+    app.execute(Command::FocusPaneRight);
+    let _ = screen(&mut app, 80, 24);
+    assert_eq!(app.panes[1].top, right_top, "coming back did not move it");
+}
+
+#[test]
+fn typing_does_not_drag_the_other_pane_to_the_cursor() {
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+
+    // Scroll the left pane away from the cursor, then type in the right one.
+    app.execute(Command::FocusPaneLeft);
+    wheel(&mut app, MouseEventKind::ScrollDown);
+    let _ = screen(&mut app, 80, 24);
+    let left_top = app.panes[0].top;
+    assert!(left_top > 0);
+
+    app.execute(Command::FocusPaneRight);
+    let _ = screen(&mut app, 80, 24);
+    type_str(&mut app, "X");
+    let _ = screen(&mut app, 80, 24);
+
+    assert_eq!(
+        app.panes[0].top, left_top,
+        "the pane that was not being typed into did not move"
+    );
+    assert!(
+        pane_rows(&mut app, 80, 24, 0)[0].contains(&format!("line {}", left_top + 1)),
+        "and still shows the line it was showing"
+    );
+}
+
+#[test]
+fn a_click_maps_against_the_pane_it_lands_in() {
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+
+    // Put the two panes at different places first.
+    split(&mut app);
+    wheel(&mut app, MouseEventKind::ScrollDown);
+    wheel(&mut app, MouseEventKind::ScrollDown);
+    let _ = screen(&mut app, 80, 24);
+
+    let left = app.panes[0].rect;
+    let right = app.panes[1].rect;
+    let row = left.y + 3;
+
+    // Row 3 of the left pane is line 4; row 3 of the right pane is further down
+    // because that pane is scrolled.
+    click(&mut app, left.x + 6, row);
+    let _ = screen(&mut app, 80, 24);
+    let (left_line, _) = app.buffers[0].cursor_line_col();
+    assert_eq!(left_line, 3, "row 3 of the unscrolled pane is line 4");
+
+    click(&mut app, right.x + 6, row);
+    let _ = screen(&mut app, 80, 24);
+    let (right_line, _) = app.buffers[0].cursor_line_col();
+    assert_ne!(
+        right_line, left_line,
+        "the same screen row is a different line in a scrolled pane"
+    );
+    assert_eq!(
+        right_line,
+        app.panes[1].top + 3,
+        "and it is the line that pane is showing"
+    );
+}
+
+#[test]
+fn the_caret_is_placed_in_the_focused_pane() {
+    // The caret is the terminal's cursor, not a cell: whichever pane draws last
+    // would own it, and an inactive pane drawing the document's cursor is what
+    // made it appear in the wrong view.
+    let scratch = Scratch::new();
+    let path = scratch.file("one.txt", "alpha\nbeta\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    let caret = terminal.get_cursor_position().expect("a cursor position");
+    let right = app.panes[1].rect;
+    let left = app.panes[0].rect;
+    assert!(
+        right.contains(caret),
+        "the caret is in the focused pane: {caret:?} not in {right:?}"
+    );
+    assert!(!left.contains(caret), "and not in the other one");
+
+    // It follows the focus, rather than staying where it was drawn.
+    app.execute(Command::FocusPaneLeft);
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    let caret = terminal.get_cursor_position().expect("a cursor position");
+    assert!(
+        left.contains(caret),
+        "the caret moved with the focus: {caret:?} in {left:?}"
+    );
+}
+
+#[test]
+fn the_wheel_scrolls_the_pane_under_the_pointer() {
+    // Scrolling is looking, not typing: the pane under the pointer moves, and
+    // the focus stays where the keyboard is.
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+    assert_eq!(app.active_pane, 1, "the right pane has the focus");
+
+    let left = app.panes[0].rect;
+    app.handle_event(Event::Mouse(MouseEvent {
+        kind: MouseEventKind::ScrollDown,
+        column: left.x + 5,
+        row: left.y + 4,
+        modifiers: KeyModifiers::NONE,
+    }));
+    let _ = screen(&mut app, 80, 24);
+
+    assert!(app.panes[0].top > 0, "the pane under the pointer scrolled");
+    assert_eq!(app.panes[1].top, 0, "the other one did not");
+    assert_eq!(app.active_pane, 1, "and the focus did not move");
+}
+
+#[test]
+fn the_wheel_over_a_pane_does_not_disturb_the_cursor_view() {
+    // The pane that owns the cursor must not be dragged by a wheel gesture in
+    // its neighbour.
+    let scratch = Scratch::new();
+    let path = scratch.file("long.txt", &numbered(200));
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+    let right_top = app.panes[1].top;
+
+    let left = app.panes[0].rect;
+    app.handle_event(Event::Mouse(MouseEvent {
+        kind: MouseEventKind::ScrollDown,
+        column: left.x + 5,
+        row: left.y + 4,
+        modifiers: KeyModifiers::NONE,
+    }));
+    let _ = screen(&mut app, 80, 24);
+
+    assert_eq!(app.panes[1].top, right_top, "the focused pane stayed put");
+    assert_eq!(
+        app.buffers[0].scroll_top(),
+        right_top,
+        "and so did the document the cursor reads from"
+    );
+}

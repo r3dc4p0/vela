@@ -501,6 +501,7 @@ fn draw_pane(frame: &mut Frame, area: Rect, app: &mut App, pane: usize, install:
         brackets,
         cache,
         focused: pane == app.active_pane && app.ui.overlay.is_none(),
+        follows_cursor: pane == app.active_pane,
     };
     renderer.render(frame, area);
 
