@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="505 225 398 303" width="398" height="303" role="img" aria-labelledby="t">
+  <title id="t">V logo with curly braces</title>
+  <defs>
+
+    <!-- V arms -->
+    <linearGradient id="armL" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#8985E2"/>
+      <stop offset="0.5" stop-color="#8F8CE7"/>
+      <stop offset="1" stop-color="#9894EC"/>
+    </linearGradient>
+    <linearGradient id="armR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8581DE"/>
+      <stop offset="1" stop-color="#8F8CE7"/>
+    </linearGradient>
+    <!-- fold shade in the notch -->
+    <linearGradient id="fold" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#8F8CE7"/>
+      <stop offset="0.5" stop-color="#6F6CC4"/>
+      <stop offset="1" stop-color="#5754A3"/>
+    </linearGradient>
+
+    <!-- translucent braces -->
+    <linearGradient id="brace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DEDDF9" stop-opacity="0.78"/>
+      <stop offset="0.45" stop-color="#BAB8F1" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#7A77D8" stop-opacity="1"/>
+    </linearGradient>
+
+    <path id="braceShape" d="M640 285
+      C614 285 597 294 597 320
+      L597 352
+      C597 370 589 380 571 383
+      C589 386 597 396 597 414
+      L597 452
+      C597 484 614 498 640 498
+      L640 485
+      C624 485 612 477 612 452
+      L612 414
+      C612 394 604 387 592 383.5
+      C604 380 612 372 612 352
+      L612 320
+      C612 300 622 298 640 298 Z"/>
+  </defs>
+
+  <!-- V: right arm runs underneath the left arm, so no gap at the junction -->
+  <polygon points="775,237 891,237 752,516 700,516 690,420 701.5,397.6" fill="url(#armR)"/>
+  <polygon points="517,237 633,237 752,516 655,516" fill="url(#armL)"/>
+  <!-- fold shade: starts exactly at the notch and follows the left arm's edge -->
+  <polygon points="701.5,397.6 737,347 752,516" fill="url(#fold)"/>
+
+  <!-- V border (outline of the whole silhouette) -->
+  <path d="M517 237 L633 237 L701.5 397.6 L775 237 L891 237 L752 516 L655 516 Z"
+        fill="none" stroke="#CEA2FD" stroke-width="4" stroke-linejoin="miter" stroke-miterlimit="4"/>
+
+  <!-- braces -->
+  <g>
+    <use href="#braceShape" fill="url(#brace)"/>
+    <use href="#braceShape" fill="url(#brace)" transform="translate(1409 0) scale(-1 1)"/>
+  </g>
+</svg>

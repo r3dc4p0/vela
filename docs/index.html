@@ -10,8 +10,12 @@
 <meta property="og:title" content="Vela — a fast terminal text editor">
 <meta property="og:description" content="Modal-free editing with the shortcuts you already use. Written in Rust. Opens in 7 ms and never loses your work.">
 <meta property="og:url" content="https://r3dc4p0.github.io/vela/">
+<meta property="og:image" content="https://r3dc4p0.github.io/vela/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://r3dc4p0.github.io/vela/">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314171e'/%3E%3Crect x='8' y='8' width='4' height='16' fill='%23c8a05a'/%3E%3Crect x='15' y='8' width='10' height='3' fill='%237ab8d8'/%3E%3Crect x='15' y='14.5' width='7' height='3' fill='%238b93a3'/%3E%3Crect x='15' y='21' width='5' height='3' fill='%238b93a3'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='497 207 414 414'%3E%3Crect x='497' y='207' width='414' height='414' rx='96' fill='%2314171e'/%3E%3Cpath d='M517 237 L633 237 L701.5 397.6 L775 237 L891 237 L752 516 L655 516 Z' fill='%238F8CE7' transform='translate(0 37.5)'/%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #0e1116;
@@ -22,7 +26,7 @@
     --fg: #d7dce5;
     --fg-dim: #9aa3b2;
     --fg-faint: #7c8696;
-    --gold: #c8a05a;
+    --accent: #8F8CE7;
     --blue: #7ab8d8;
     --green: #8fbf7f;
     --violet: #b092d0;
@@ -54,7 +58,7 @@
     inset: 0;
     pointer-events: none;
     background:
-      radial-gradient(900px 480px at 50% -8%, rgba(200, 160, 90, 0.10), transparent 70%),
+      radial-gradient(900px 480px at 50% -8%, rgba(143, 140, 231, 0.10), transparent 70%),
       radial-gradient(700px 420px at 82% 12%, rgba(122, 184, 216, 0.06), transparent 72%);
     z-index: 0;
   }
@@ -65,7 +69,7 @@
   a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
   :focus-visible {
-    outline: 2px solid var(--gold);
+    outline: 2px solid var(--accent);
     outline-offset: 3px;
     border-radius: 4px;
   }
@@ -74,7 +78,7 @@
     position: absolute;
     left: -9999px;
     top: 0;
-    background: var(--gold);
+    background: var(--accent);
     color: #12151b;
     padding: 10px 16px;
     font-weight: 600;
@@ -118,11 +122,9 @@
   }
   .brand:hover { text-decoration: none; }
   .brand .mark {
-    width: 9px;
     height: 18px;
-    background: var(--gold);
-    display: inline-block;
-    border-radius: 1px;
+    width: auto;
+    display: block;
   }
 
   .nav-links {
@@ -139,9 +141,9 @@
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--gold);
-    border: 1px solid rgba(200, 160, 90, 0.35);
-    background: rgba(200, 160, 90, 0.08);
+    color: var(--accent);
+    border: 1px solid rgba(143, 140, 231, 0.35);
+    background: rgba(143, 140, 231, 0.08);
     padding: 3px 9px;
     border-radius: 999px;
     white-space: nowrap;
@@ -152,6 +154,13 @@
   .hero {
     padding: 88px 0 40px;
     text-align: center;
+  }
+
+  .hero .hero-logo {
+    display: block;
+    margin: 0 auto 26px;
+    width: clamp(84px, 11vw, 132px);
+    height: auto;
   }
 
   .hero h1 {
@@ -167,7 +176,7 @@
     display: inline-block;
     width: 0.42em;
     height: 0.78em;
-    background: var(--gold);
+    background: var(--accent);
     vertical-align: baseline;
     margin-left: 0.1em;
     border-radius: 1px;
@@ -219,7 +228,7 @@
   .btn:active { transform: translateY(0); }
 
   .btn-primary {
-    background: var(--gold);
+    background: var(--accent);
     color: #12151b;
     font-weight: 600;
   }
@@ -286,9 +295,9 @@
   }
 
   .term .bar.top { border-bottom: 1px solid var(--line-soft); }
-  .term .bar .left { color: var(--gold); letter-spacing: 0.1em; font-weight: 600; }
+  .term .bar .left { color: var(--accent); letter-spacing: 0.1em; font-weight: 600; }
   .term .bar .left .path { color: var(--fg-dim); letter-spacing: 0; font-weight: 400; }
-  .term .bar .left .dot-mod { color: var(--gold); }
+  .term .bar .left .dot-mod { color: var(--accent); }
   .term .bar .right { color: var(--fg-faint); font-size: 11.5px; }
 
   .term .tabs {
@@ -306,7 +315,7 @@
   .term .tab.active {
     background: var(--panel);
     color: var(--fg);
-    border-left-color: var(--gold);
+    border-left-color: var(--accent);
   }
 
   .term .code { padding: 10px 0 12px; }
@@ -329,19 +338,19 @@
   .term .code-body { padding-right: 18px; }
 
   .term .row.cursorline { background: rgba(122, 184, 216, 0.045); }
-  .term .row.cursorline .gutter { color: var(--gold); }
+  .term .row.cursorline .gutter { color: var(--accent); }
 
   .caret {
     display: inline-block;
     width: 7px;
     height: 1.05em;
-    background: var(--gold);
+    background: var(--accent);
     vertical-align: text-bottom;
     margin: 0 -1px;
     animation: blink 1.15s steps(1, end) infinite;
   }
 
-  .kw { color: var(--gold); }
+  .kw { color: var(--accent); }
   .ty { color: var(--blue); }
   .st { color: var(--green); }
   .cm { color: #5b6472; font-style: italic; }
@@ -361,7 +370,7 @@
     color: var(--fg-dim);
   }
   .term .status .seg { display: flex; align-items: center; gap: 12px; }
-  .term .status .lang { color: var(--gold); }
+  .term .status .lang { color: var(--accent); }
   .term .status .pill {
     background: rgba(255, 255, 255, 0.05);
     padding: 0 6px;
@@ -397,7 +406,7 @@
     font-size: 11.5px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--gold);
+    color: var(--accent);
     margin: 0 0 12px;
   }
 
@@ -437,7 +446,7 @@
     display: block;
     width: 22px;
     height: 2px;
-    background: var(--gold);
+    background: var(--accent);
     opacity: 0.75;
     margin-bottom: 20px;
   }
@@ -489,7 +498,7 @@
     letter-spacing: -0.02em;
     line-height: 1.1;
   }
-  .stat .val em { font-style: normal; color: var(--gold); }
+  .stat .val em { font-style: normal; color: var(--accent); }
   .stat .lbl {
     font-size: 12.5px;
     color: var(--fg-faint);
@@ -696,7 +705,7 @@
 <header class="nav">
   <div class="wrap">
     <a class="brand" href="#top">
-      <span class="mark" aria-hidden="true"></span> Vela
+      <img class="mark" src="logo-v.svg" alt="" width="24" height="18"> Vela
     </a>
     <nav class="nav-links" aria-label="Primary">
       <a href="#features">Features</a>
@@ -712,6 +721,7 @@
 
   <section class="hero" id="top">
     <div class="wrap">
+      <img class="hero-logo" src="logo-mark.svg" alt="" width="132" height="100">
       <h1>vela<span class="cursor" aria-hidden="true"></span></h1>
       <p class="lede">
         A terminal text editor that doesn&rsquo;t make you learn a new language.

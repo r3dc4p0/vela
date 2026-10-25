@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="511 231 386 291" width="386" height="291" role="img" aria-labelledby="t">
+  <title id="t">Vela</title>
+  <defs>
+
+    <!-- V arms -->
+    <linearGradient id="armL" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#8985E2"/>
+      <stop offset="0.5" stop-color="#8F8CE7"/>
+      <stop offset="1" stop-color="#9894EC"/>
+    </linearGradient>
+    <linearGradient id="armR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8581DE"/>
+      <stop offset="1" stop-color="#8F8CE7"/>
+    </linearGradient>
+    <!-- fold shade in the notch -->
+    <linearGradient id="fold" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#8F8CE7"/>
+      <stop offset="0.5" stop-color="#6F6CC4"/>
+      <stop offset="1" stop-color="#5754A3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- V: right arm runs underneath the left arm, so no gap at the junction -->
+  <polygon points="775,237 891,237 752,516 700,516 690,420 701.5,397.6" fill="url(#armR)"/>
+  <polygon points="517,237 633,237 752,516 655,516" fill="url(#armL)"/>
+  <!-- fold shade: starts exactly at the notch and follows the left arm's edge -->
+  <polygon points="701.5,397.6 737,347 752,516" fill="url(#fold)"/>
+
+  <!-- V border (outline of the whole silhouette) -->
+  <path d="M517 237 L633 237 L701.5 397.6 L775 237 L891 237 L752 516 L655 516 Z"
+        fill="none" stroke="#CEA2FD" stroke-width="4" stroke-linejoin="miter" stroke-miterlimit="4"/>
+</svg>
