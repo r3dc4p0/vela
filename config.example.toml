@@ -67,6 +67,9 @@ trim_trailing_whitespace = false
 ensure_final_newline = false
 # Warn before overwriting a file that changed on disk since it was opened.
 warn_external_change = true
+# Keep a copy of the unsaved buffers under the data directory, so a crash or a
+# killed terminal cannot lose them. A clean exit throws the copy away.
+recover_unsaved = true
 # How many entries to remember for Ctrl+P / the open prompt.
 recent_files = 20
 

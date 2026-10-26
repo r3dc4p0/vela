@@ -37,6 +37,7 @@ pub mod input;
 pub mod keymap;
 pub mod logging;
 pub mod platform;
+pub mod recovery;
 pub mod search;
 pub mod syntax;
 pub mod terminal;

@@ -66,7 +66,10 @@ is a badge. If you prefer the older block-glyph chrome, `Ctrl+Shift+U`,
 `rename`) that preserve permissions and symlinks; UTF-8/UTF-16 with BOM
 detection; LF/CRLF/CR line endings detected per file and written back unchanged;
 binary files refused rather than corrupted; external-modification detection;
-recent files; session restore. Big files open on a worker thread behind a
+recent files; session restore. Unsaved buffers are copied to the data directory
+a second after they change, so a crash, a `kill` or a closed terminal does not
+take them with it — the next start brings them back, dirty, at the cursor they
+had. A clean exit discards the copy, because by then you have been asked. Big files open on a worker thread behind a
 progress panel that counts the bytes actually read, so the window keeps painting
 while a two-gigabyte file loads.
 

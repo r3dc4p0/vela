@@ -306,6 +306,44 @@ instead cost eight seconds on an eighteen-million-line file, so the bound is
 deliberately local: it is re-measured every frame, which twenty rows can afford,
 and it never learns about text the user cannot see.
 
+### Crash recovery is a snapshot, not a journal
+
+Atomic saves protect the file being written. They do nothing for changes that
+were never written, and that is the failure an editor cannot apologise for — so
+every modified buffer is copied into a snapshot under the data directory
+(`recovery/recovery`), a second and a half after the change that made it dirty.
+
+Three decisions carry it:
+
+- **A clean exit deletes the snapshot.** By then the user has been asked whether
+  to save, and a "discard" that quietly keeps a copy is a lie. What survives is
+  exactly the exit that had no chance to ask: a crash, a `kill`, a terminal that
+  went away. A panic unwinds out of the event loop, so `shutdown` never runs and
+  the snapshot stays — which is the right bias.
+- **The write is debounced, not per keystroke.** Copying eight megabytes on
+  every character would be felt; copying it once the typing stops is not. The
+  event loop calls `maybe_snapshot` every iteration, and a fingerprint of
+  `(id, revision, dirty)` per buffer says whether anything actually changed —
+  no hook on each of the paths that can dirty a buffer.
+- **A record the disk has overtaken is skipped.** Each record carries the file's
+  mtime and length as they were when the buffer was loaded or saved. If either
+  has moved, the file was written after the snapshot was taken: the disk holds
+  everything the record knows, and applying it would go backwards.
+
+Recovery writes the state straight back before returning. Between reading the
+snapshot and the first timer-driven write, the recovered buffers exist only in
+memory — and `--smoke` exits without ever reaching the event loop, so it would
+otherwise read the snapshot, apply it, and drop it on the floor. Writing back is
+atomic, so the old file is replaced in one step rather than cleared and
+rewritten.
+
+Buffers over `recovery::LIMIT` (8 MiB) are not copied — rewriting a hundred
+megabytes every couple of seconds would be a stutter — but the record keeps the
+path and says so, and the startup message names the file rather than silently
+dropping it. The format is length-prefixed (`flags line col mtime len path_len
+text_len`, then the bytes) so a path with a tab or a newline cannot be misread,
+and a truncated file yields the records that were complete.
+
 ### Panes are views, not buffers
 
 A pane is `{ buffer, top, row, left, detached, rect }` — which buffer, where in
@@ -444,6 +482,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| Recovery | `tests/recovery.rs`: an unsaved buffer survives a crash with its text and cursor, a clean exit discards the snapshot, a saved buffer is not recovered, an untitled buffer comes back untitled, a file written after the snapshot wins over the copy, a snapshot is applied once, and nothing is written without persistence |
 | Panes | `tests/split.rs`: two panes of equal width with a divider between them, one buffer at two scroll positions, an edit visible in both panes, two buffers in two panes, click-to-focus, closing a pane and the refusal to close the last one, a closed buffer leaving no dangling pane index, and a split refused when the panes would be too narrow |
 | Drawing styles | `tests/ui_style.rs`: both styles render the same words, the pixel style frames panels in hairlines where the block style boxes them, a title breaks its own rule, no row is spent on a border and no bar is underlined, and the toggle is announced |
 | Invariants | `tests/property.rs` with proptest: undo symmetry, cursor bounds (with and without wrapping), search range validity, wrap partitioning and round trips, save/load round trips |

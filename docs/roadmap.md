@@ -20,6 +20,8 @@ Ordered by what a user notices first, not by what is easiest.
 - Terminal restoration on panic and on `SIGTERM`/`SIGINT`/`SIGHUP`/`SIGQUIT`
 - Encoding detection (UTF-8, UTF-16 with BOM), LF/CRLF/CR round-tripping
 - External-modification detection at save time
+- Crash recovery: unsaved buffers are snapshotted to the data directory and come
+  back after a crash, with the cursor; a clean exit discards the snapshot
 - Unit, integration, UI and property tests; Criterion benchmarks
 
 ## Next

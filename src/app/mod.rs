@@ -13,6 +13,7 @@
 mod files;
 mod panes;
 mod prompts;
+mod recovery;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -86,6 +87,15 @@ pub struct App {
     pub enhanced_keys: bool,
     pub config_path: PathBuf,
     pub config_warnings: Vec<String>,
+    /// Where recents, the session and the recovery snapshot live.
+    ///
+    /// Empty in headless runs, which must never read or write the user's
+    /// profile — that is what keeps the integration tests deterministic.
+    pub data_dir: PathBuf,
+    /// The generation the last recovery snapshot was written from.
+    snapshot_generation: u64,
+    /// When that snapshot was written, for the debounce.
+    snapshot_at: Option<Instant>,
 
     tx: Sender<Job>,
     rx: Receiver<Job>,
@@ -152,6 +162,9 @@ impl App {
         }
 
         app.ensure_panes();
+        // Whatever the last session left unsaved comes back before anything
+        // else can overwrite it.
+        app.recover_unsaved();
 
         // Surface configuration problems without blocking startup.
         let warnings = app.config_warnings.clone();
@@ -170,6 +183,7 @@ impl App {
     pub fn headless(cwd: PathBuf, config: Config) -> Self {
         let mut app = Self::base(config, PathBuf::new(), Vec::new(), false);
         app.persist = false;
+        app.data_dir = PathBuf::new();
         app.cwd = cwd;
         app.clipboard = Clipboard::internal_only();
         app.buffers.push(Document::untitled());
@@ -190,6 +204,9 @@ impl App {
             buffers: Vec::new(),
             panes: Vec::new(),
             active_pane: 0,
+            data_dir: platform::data_dir(),
+            snapshot_generation: 0,
+            snapshot_at: None,
             config,
             theme,
             keymap: Keymap::defaults(),
@@ -320,6 +337,7 @@ impl App {
             self.frame += 1;
 
             self.poll_jobs();
+            self.maybe_snapshot();
 
             // Wake up regularly for message expiry and background jobs, but do
             // not burn CPU when idle. While a file is opening the timeout also
@@ -348,7 +366,7 @@ impl App {
                 }
             }
         }
-        self.on_exit();
+        self.shutdown();
         info!("event loop finished");
         Ok(())
     }
@@ -420,11 +438,19 @@ impl App {
         }
     }
 
-    fn on_exit(&mut self) {
+    /// Finish the session: persist what should persist, drop what should not.
+    ///
+    /// Public so a test — or a future front end — can end a session without
+    /// going through the event loop.
+    pub fn shutdown(&mut self) {
         self.save_recent();
         if self.config.editor.restore_session {
             self.save_session();
         }
+        // A clean exit means the user was asked about the unsaved buffers and
+        // answered. Keeping a copy would make "discard" a lie; what a crash
+        // leaves behind is the case that never got to ask.
+        self.clear_snapshot();
     }
 
     // ---------------------------------------------------------------- events

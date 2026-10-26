@@ -21,7 +21,6 @@ use crate::buffer::Document;
 use crate::commands::Command;
 use crate::editing;
 use crate::filesystem::{self, LoadedFile};
-use crate::platform;
 use crate::ui::{Confirm, ConfirmAction, Level, Overlay, PathPrompt};
 
 /// How long an open may take before the loader panel appears.
@@ -244,7 +243,8 @@ impl App {
     /// made would silently collapse. In that case the file is appended and
     /// loaded into the pane with the focus, which leaves the other pane showing
     /// the scratch buffer it had.
-    fn adopt(&mut self, doc: Document) {
+    /// Returns the index the document ended up at.
+    pub(crate) fn adopt(&mut self, doc: Document) -> usize {
         match self.replaceable_blank() {
             Some(idx) => {
                 let old = self.buffers[idx].id();
@@ -261,11 +261,13 @@ impl App {
                     }
                 }
                 self.install_active_view();
+                idx
             }
             None => {
                 self.buffers.push(doc);
                 self.ensure_panes();
                 self.set_active_buffer(self.buffers.len() - 1);
+                self.buffers.len() - 1
             }
         }
     }
@@ -610,10 +612,10 @@ impl App {
     // -------------------------------------------------------------- recents
 
     pub fn load_recent(&mut self) {
-        if !self.persist {
+        if !self.persistence_on() {
             return;
         }
-        let path = platform::recent_files_path();
+        let path = self.data_dir.join("recent");
         let Ok(text) = std::fs::read_to_string(&path) else {
             return;
         };
@@ -635,10 +637,10 @@ impl App {
     }
 
     pub(crate) fn save_recent(&mut self) {
-        if !self.persist {
+        if !self.persistence_on() {
             return;
         }
-        let path = platform::recent_files_path();
+        let path = self.data_dir.join("recent");
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
@@ -657,10 +659,10 @@ impl App {
 
     /// Persist open buffers and cursor positions.
     pub fn save_session(&mut self) {
-        if !self.persist {
+        if !self.persistence_on() {
             return;
         }
-        let dir = platform::data_dir();
+        let dir = self.data_dir.clone();
         let _ = std::fs::create_dir_all(&dir);
         let mut out = String::new();
         for doc in &self.buffers {
@@ -674,10 +676,10 @@ impl App {
     /// Restore the previous session. Returns true when at least one buffer was
     /// reopened.
     pub fn restore_session(&mut self) -> bool {
-        if !self.persist {
+        if !self.persistence_on() {
             return false;
         }
-        let path = platform::data_dir().join("session");
+        let path = self.data_dir.join("session");
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };

@@ -179,6 +179,8 @@ pub struct FileSettings {
     pub ensure_final_newline: bool,
     /// Warn when the file changed on disk before overwriting it.
     pub warn_external_change: bool,
+    /// Keep a copy of the unsaved buffers, so a crash cannot lose them.
+    pub recover_unsaved: bool,
     /// Number of recent files to remember.
     pub recent_files: usize,
     /// Default directory for the file finder, relative to the file or cwd.
@@ -191,6 +193,7 @@ impl Default for FileSettings {
             trim_trailing_whitespace: false,
             ensure_final_newline: false,
             warn_external_change: true,
+            recover_unsaved: true,
             recent_files: 20,
             find_root: None,
         }
