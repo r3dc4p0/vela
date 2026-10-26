@@ -692,3 +692,146 @@ fn the_wheel_over_a_pane_does_not_disturb_the_cursor_view() {
         "and so did the document the cursor reads from"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Opening files into a split.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn opening_a_file_into_a_split_keeps_both_panes() {
+    // The blank buffer is on screen twice, so it cannot be swapped for the file
+    // behind both panes' backs: the file goes into the pane with the focus and
+    // the other keeps the scratch buffer it was showing.
+    let scratch = Scratch::new();
+    let path = scratch.file("notes.txt", "hello\n");
+    let mut app = editor(scratch.path());
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+
+    open(&mut app, &path);
+    let rows = screen(&mut app, 80, 24);
+    for (i, row) in rows.iter().enumerate() {
+        println!("{i:>2}|{row}|");
+    }
+
+    assert_eq!(app.pane_count(), 2, "the split survived opening a file");
+    assert_eq!(app.buffers.len(), 2, "the blank buffer was kept");
+    assert_eq!(
+        app.panes[1].buffer, 1,
+        "the file landed in the pane with the focus"
+    );
+    assert_eq!(app.panes[0].buffer, 0, "the other pane kept its buffer");
+
+    let left = pane_rows(&mut app, 80, 24, 0);
+    let right = pane_rows(&mut app, 80, 24, 1);
+    assert!(right.iter().any(|r| r.contains("hello")), "{right:?}");
+    assert!(
+        !left.iter().any(|r| r.contains("hello")),
+        "the left pane is still the blank one: {left:?}"
+    );
+}
+
+#[test]
+fn opening_a_second_file_puts_it_beside_the_first() {
+    let scratch = Scratch::new();
+    let a = scratch.file("a.txt", "first\n");
+    let b = scratch.file("b.txt", "second\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &a);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+
+    open(&mut app, &b);
+    let _ = screen(&mut app, 80, 24);
+
+    assert_eq!(app.pane_count(), 2);
+    let left = pane_rows(&mut app, 80, 24, 0);
+    let right = pane_rows(&mut app, 80, 24, 1);
+    assert!(left.iter().any(|r| r.contains("first")), "{left:?}");
+    assert!(right.iter().any(|r| r.contains("second")), "{right:?}");
+}
+
+#[test]
+fn one_pane_still_replaces_the_blank_buffer() {
+    // The old behaviour, unchanged: no stray untitled tab after opening a file.
+    let scratch = Scratch::new();
+    let path = scratch.file("notes.txt", "hello\n");
+    let mut app = editor(scratch.path());
+    let _ = screen(&mut app, 80, 24);
+
+    open(&mut app, &path);
+    assert_eq!(app.panes.len(), 1);
+    assert_eq!(app.buffers.len(), 1, "the blank buffer was replaced");
+    assert_eq!(app.buffers[0].path(), Some(path.as_path()));
+}
+
+#[test]
+fn a_blank_buffer_shown_once_can_be_replaced_even_in_a_split() {
+    // One pane on a file, the other on a blank scratch: opening a file replaces
+    // the blank rather than leaving an empty tab, because only one view is
+    // looking at it.
+    let scratch = Scratch::new();
+    let a = scratch.file("a.txt", "first\n");
+    let b = scratch.file("b.txt", "second\n");
+    let mut app = editor(scratch.path());
+    open(&mut app, &a);
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+
+    // A fresh buffer in the focused (right) pane.
+    app.new_buffer();
+    let _ = screen(&mut app, 80, 24);
+    assert_eq!(app.buffers.len(), 2, "a blank scratch beside the file");
+
+    open(&mut app, &b);
+    let _ = screen(&mut app, 80, 24);
+
+    assert_eq!(app.pane_count(), 2, "the split survived");
+    assert_eq!(app.buffers.len(), 2, "the blank was replaced, not kept");
+    assert!(
+        app.buffers.iter().all(|d| d.path().is_some()),
+        "no untitled buffer left behind"
+    );
+    let left = pane_rows(&mut app, 80, 24, 0);
+    let right = pane_rows(&mut app, 80, 24, 1);
+    assert!(left.iter().any(|r| r.contains("first")), "{left:?}");
+    assert!(right.iter().any(|r| r.contains("second")), "{right:?}");
+}
+
+#[test]
+fn a_big_file_opened_into_a_split_keeps_both_panes() {
+    // Above the async threshold the document arrives from a worker, and the
+    // hand-over must not collapse the split either.
+    let scratch = Scratch::new();
+    let mut body = String::new();
+    while body.len() < 5 * 1024 * 1024 {
+        body.push_str("a line of text that is not short\n");
+    }
+    let path = scratch.file("big.txt", &body);
+    let mut app = editor(scratch.path());
+    let _ = screen(&mut app, 80, 24);
+    split(&mut app);
+    let _ = screen(&mut app, 80, 24);
+
+    app.open_path(path.clone());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while app.loading.is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the open never finished"
+        );
+        app.poll_jobs();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let _ = screen(&mut app, 80, 24);
+
+    assert_eq!(app.pane_count(), 2, "the split survived the worker");
+    assert_eq!(
+        app.panes[1].buffer, 1,
+        "the file landed in the focused pane"
+    );
+    assert!(app.buffers[0].path().is_none(), "the scratch was kept");
+}

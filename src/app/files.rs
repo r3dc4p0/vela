@@ -208,17 +208,7 @@ impl App {
                 let mut doc = Document::from_text("", Some(path.clone()));
                 doc.set_eol(crate::filesystem::Eol::Lf);
                 doc.mark_saved();
-                let replace_blank = self.buffers.len() == 1
-                    && self.buffers[0].path().is_none()
-                    && !self.buffers[0].is_modified()
-                    && self.buffers[0].len_chars() == 0;
-                if replace_blank {
-                    self.buffers.clear();
-                    self.panes.clear();
-                }
-                self.buffers.push(doc);
-                self.ensure_panes();
-                self.set_active_buffer(self.buffers.len() - 1);
+                self.adopt(doc);
                 self.search.clear();
                 self.info(format!("New file {}", path.display()));
             }
@@ -232,19 +222,7 @@ impl App {
     /// document: everything expensive has happened by the time this runs, and
     /// all that is left is a `Vec` push.
     pub(crate) fn install(&mut self, path: PathBuf, opened: OpenedBuffer) {
-        // Replace a pristine untitled buffer rather than leaving a blank tab.
-        let replace_blank = self.buffers.len() == 1
-            && self.buffers[0].path().is_none()
-            && !self.buffers[0].is_modified()
-            && self.buffers[0].len_chars() == 0;
-        if replace_blank {
-            self.buffers.clear();
-            self.panes.clear();
-        }
-
-        self.buffers.push(opened.document);
-        self.ensure_panes();
-        self.set_active_buffer(self.buffers.len() - 1);
+        self.adopt(opened.document);
         self.add_recent(&path);
         self.search.clear();
 
@@ -255,6 +233,57 @@ impl App {
                 self.buffers[self.active()].eol().label()
             ));
         }
+    }
+
+    /// Put a freshly opened document into the buffer list.
+    ///
+    /// A pristine untitled buffer is replaced rather than left behind as an
+    /// empty tab — but only when a single pane is showing it. Two panes on the
+    /// blank buffer are two views of one document, and swapping it for the file
+    /// would rewrite the other view behind the user's back: the split they just
+    /// made would silently collapse. In that case the file is appended and
+    /// loaded into the pane with the focus, which leaves the other pane showing
+    /// the scratch buffer it had.
+    fn adopt(&mut self, doc: Document) {
+        match self.replaceable_blank() {
+            Some(idx) => {
+                let old = self.buffers[idx].id();
+                self.syntax_cache.remove(&old);
+                self.brackets_cache_reset();
+                self.buffers[idx] = doc;
+                // The viewport described the blank buffer, not the file.
+                for pane in &mut self.panes {
+                    if pane.buffer == idx {
+                        pane.top = 0;
+                        pane.row = 0;
+                        pane.left = 0;
+                        pane.detached = false;
+                    }
+                }
+                self.install_active_view();
+            }
+            None => {
+                self.buffers.push(doc);
+                self.ensure_panes();
+                self.set_active_buffer(self.buffers.len() - 1);
+            }
+        }
+    }
+
+    /// The pristine untitled buffer a new file may take the place of.
+    ///
+    /// It has to be the buffer the file would be loaded into — the one in the
+    /// pane with the focus — and it has to be a blank scratch that no other
+    /// pane is looking at. Two views of one blank buffer cannot be replaced:
+    /// the file would appear in both, rewriting the split the user just made.
+    fn replaceable_blank(&self) -> Option<usize> {
+        let idx = self.panes.get(self.active_pane)?.buffer;
+        let doc = self.buffers.get(idx)?;
+        if doc.path().is_some() || doc.is_modified() || doc.len_chars() != 0 {
+            return None;
+        }
+        let viewers = self.panes.iter().filter(|p| p.buffer == idx).count();
+        (viewers <= 1).then_some(idx)
     }
 
     /// Turn a possibly relative path into an absolute one.
