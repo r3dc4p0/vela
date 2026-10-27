@@ -22,7 +22,15 @@ pub enum Typed {
     Plain,
     /// Insert `text` in its place, leaving the caret `caret_back` characters
     /// before the end of what was inserted.
-    Insert { text: String, caret_back: usize },
+    ///
+    /// `anchor_back`, when set, leaves a selection behind: the anchor sits that
+    /// many characters before the end, so the two together select the text that
+    /// was surrounded. That is what lets a wrapped selection be wrapped again.
+    Insert {
+        text: String,
+        caret_back: usize,
+        anchor_back: Option<usize>,
+    },
     /// The matching character is already next to the caret: step over it.
     Step,
 }
@@ -65,14 +73,15 @@ pub fn is_quote(typed: char) -> bool {
 
 /// What typing `typed` should do, given what surrounds the caret.
 pub fn decide(typed: char, around: Around<'_>) -> Typed {
-    // A selection is surrounded, never replaced: `foo` becomes `(foo)` with the
-    // caret after the closer. This comes first because a selection makes the
-    // characters around it irrelevant — they are about to be replaced.
+    // A selection is surrounded, never replaced: `foo` becomes `(foo)`. It also
+    // stays selected, so a second bracket wraps the same text again rather than
+    // replacing it — which is the whole point of surrounding something.
     if let Some(sel) = around.selection {
         return match closer_for(typed) {
             Some(close) => Typed::Insert {
                 text: format!("{typed}{sel}{close}"),
-                caret_back: 0,
+                caret_back: 1,
+                anchor_back: Some(1 + sel.chars().count()),
             },
             None => Typed::Plain,
         };
@@ -96,6 +105,7 @@ pub fn decide(typed: char, around: Around<'_>) -> Typed {
     Typed::Insert {
         text: format!("{typed}{close}"),
         caret_back: 1,
+        anchor_back: None,
     }
 }
 
@@ -158,6 +168,16 @@ mod tests {
         Typed::Insert {
             text: text.to_string(),
             caret_back,
+            anchor_back: None,
+        }
+    }
+
+    /// An insertion that leaves a selection behind.
+    fn surrounded(text: &str, caret_back: usize, anchor_back: usize) -> Typed {
+        Typed::Insert {
+            text: text.to_string(),
+            caret_back,
+            anchor_back: Some(anchor_back),
         }
     }
 
@@ -175,14 +195,16 @@ mod tests {
             after: Some(')'),
             selection: Some("foo"),
         };
-        assert_eq!(decide('(', around), inserted("(foo)", 0));
+        // The caret sits after the surrounded text, one character before the
+        // closer, and the anchor one character past the opener.
+        assert_eq!(decide('(', around), surrounded("(foo)", 1, 4));
 
         let around = Around {
             before: Some(' '),
             after: None,
             selection: Some("bar"),
         };
-        assert_eq!(decide('"', around), inserted("\"bar\"", 0));
+        assert_eq!(decide('"', around), surrounded("\"bar\"", 1, 4));
         assert_eq!(decide(')', around), Typed::Plain, "a closer cannot open");
     }
 

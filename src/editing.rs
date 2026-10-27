@@ -565,9 +565,18 @@ pub fn type_char_at_carets(doc: &mut Document, typed: char) -> bool {
             let is_primary = caret == primary;
             match decision {
                 Typed::Plain => CaretEdit::new(range, typed.to_string(), is_primary),
-                Typed::Insert { text, caret_back } => {
+                Typed::Insert {
+                    text,
+                    caret_back,
+                    anchor_back,
+                } => {
                     special = true;
-                    CaretEdit::new(range, text, is_primary).leaving_caret_back(caret_back)
+                    let edit =
+                        CaretEdit::new(range, text, is_primary).leaving_caret_back(caret_back);
+                    match anchor_back {
+                        Some(back) => edit.keeping_selection_back(back),
+                        None => edit,
+                    }
                 }
                 Typed::Step => {
                     special = true;

@@ -321,7 +321,10 @@ Three decisions carry the feature:
   leaves the caret between them, which no existing primitive could express:
   `replace_range` puts the caret after everything it inserted. `CaretEdit` grew
   a `caret_back` — how far to back up from the end of the inserted text — which
-  is also what makes Enter between `{}` land on the indented middle line.
+  is also what makes Enter between `{}` land on the indented middle line. It
+  grew an `anchor_back` for the same reason: surrounding a selection leaves it
+  selected, so a second bracket wraps the same text again instead of replacing
+  it, and that is a caret *with an anchor* rather than a caret.
 - **Stepping over a closer is not an edit.** It is expressed as replacing the
   closer with itself: the batch sees no change, so nothing goes on the undo
   stack, but the caret moves. That is why `apply_edits` places the carets even
@@ -514,7 +517,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
-| Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded, backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, and each of these holds at every caret |
+| Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded and stays selected (so it can be surrounded again), backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, `Ctrl+Shift+A` turns the rules off and on, and each of these holds at every caret |
 | Recovery | `tests/recovery.rs`: an unsaved buffer survives a crash with its text and cursor, a clean exit discards the snapshot, a saved buffer is not recovered, an untitled buffer comes back untitled, a file written after the snapshot wins over the copy, a snapshot is applied once, and nothing is written without persistence |
 | Panes | `tests/split.rs`: two panes of equal width with a divider between them, one buffer at two scroll positions, an edit visible in both panes, two buffers in two panes, click-to-focus, closing a pane and the refusal to close the last one, a closed buffer leaving no dangling pane index, and a split refused when the panes would be too narrow |
 | Drawing styles | `tests/ui_style.rs`: both styles render the same words, the pixel style frames panels in hairlines where the block style boxes them, a title breaks its own rule, no row is spent on a border and no bar is underlined, and the toggle is announced |

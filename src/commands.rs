@@ -94,6 +94,7 @@ pub enum Command {
     FocusPaneRight,
     ToggleTheme,
     ToggleUiStyle,
+    ToggleAutoPairs,
     ToggleLineNumbers,
     ToggleRelativeNumbers,
     ToggleWhitespace,
@@ -158,6 +159,7 @@ impl Command {
         Command::FocusPaneRight,
         Command::ToggleTheme,
         Command::ToggleUiStyle,
+        Command::ToggleAutoPairs,
         Command::ToggleLineNumbers,
         Command::ToggleRelativeNumbers,
         Command::ToggleWhitespace,
@@ -220,6 +222,7 @@ impl Command {
             Command::FocusPaneRight => "view.focusPaneRight",
             Command::ToggleTheme => "view.toggleTheme",
             Command::ToggleUiStyle => "view.toggleUiStyle",
+            Command::ToggleAutoPairs => "edit.toggleAutoPairs",
             Command::ToggleLineNumbers => "view.toggleLineNumbers",
             Command::ToggleRelativeNumbers => "view.toggleRelativeNumbers",
             Command::ToggleWhitespace => "view.toggleWhitespace",
@@ -283,6 +286,7 @@ impl Command {
             Command::FocusPaneRight => "Focus Pane Right",
             Command::ToggleTheme => "Toggle Dark/Light Theme",
             Command::ToggleUiStyle => "Toggle Pixel/Cell UI Style",
+            Command::ToggleAutoPairs => "Toggle Auto-Close Pairs",
             Command::ToggleLineNumbers => "Toggle Line Numbers",
             Command::ToggleRelativeNumbers => "Toggle Relative Line Numbers",
             Command::ToggleWhitespace => "Toggle Visible Whitespace",
@@ -329,7 +333,10 @@ impl Command {
             | Command::AddCursorAbove
             | Command::AddCursorBelow
             | Command::AddCursorToNextOccurrence
-            | Command::CollapseCursors => Category::Edit,
+            | Command::CollapseCursors
+            // Typing behaviour rather than something on screen, so it belongs
+            // with the editing commands and not with the view toggles.
+            | Command::ToggleAutoPairs => Category::Edit,
             Command::GotoLine | Command::GotoBufferStart | Command::GotoBufferEnd => {
                 Category::Navigate
             }
@@ -407,6 +414,7 @@ impl Command {
             Command::FocusPaneRight => &["ctrl+alt+right"],
             Command::ToggleTheme => &["ctrl+shift+t"],
             Command::ToggleUiStyle => &["ctrl+shift+u"],
+            Command::ToggleAutoPairs => &["ctrl+shift+a"],
             Command::ToggleWhitespace => &["alt+z"],
             Command::ToggleWordWrap => &["alt+w"],
             Command::GotoBufferStart => &["ctrl+home"],
@@ -436,6 +444,7 @@ impl Command {
                 | Command::ClosePane
                 | Command::ToggleTheme
                 | Command::ToggleUiStyle
+                | Command::ToggleAutoPairs
                 | Command::ToggleHints
                 | Command::ToggleLineNumbers
                 | Command::ToggleRelativeNumbers
@@ -467,7 +476,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 57);
+        assert_eq!(Command::ALL.len(), 58);
     }
 
     #[test]

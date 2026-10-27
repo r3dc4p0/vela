@@ -22,7 +22,8 @@ auto_indent = true
 # caret between them, a closer already under the caret is stepped over rather
 # than doubled, backspace inside an empty pair removes both halves, and Enter
 # between a bracket pair opens it onto three lines. Quotes only pair where a
-# string can start, so `don't` and Rust's `&'a` are left alone.
+# string can start, so `don't` and Rust's `&'a` are left alone. Ctrl+Shift+A
+# toggles it for the session.
 auto_pairs = true
 # Colour source code. Turning this off makes no difference to the text.
 syntax_highlighting = true

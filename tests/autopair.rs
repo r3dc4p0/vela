@@ -127,6 +127,11 @@ fn a_quote_closes_the_one_it_is_inside() {
 
 // ------------------------------------------------------------ selections
 
+/// The selected text, if any.
+fn selection(app: &vela::app::App) -> Option<String> {
+    app.active_doc().map(|d| d.selected_text())
+}
+
 #[test]
 fn an_opener_typed_over_a_selection_surrounds_it() {
     let scratch = Scratch::new();
@@ -134,7 +139,12 @@ fn an_opener_typed_over_a_selection_surrounds_it() {
 
     ctrl(&mut app, 'a');
     type_str(&mut app, "(");
-    assert_eq!(marked(&app), "(foo)|");
+    assert_eq!(marked(&app), "(foo|)");
+    assert_eq!(
+        selection(&app).as_deref(),
+        Some("foo"),
+        "the text that was surrounded is still selected"
+    );
 }
 
 #[test]
@@ -144,7 +154,35 @@ fn a_quote_typed_over_a_selection_surrounds_it() {
 
     ctrl(&mut app, 'a');
     type_str(&mut app, "\"");
-    assert_eq!(marked(&app), "\"foo\"|");
+    assert_eq!(marked(&app), "\"foo|\"");
+    assert_eq!(selection(&app).as_deref(), Some("foo"));
+}
+
+#[test]
+fn a_surrounded_selection_can_be_surrounded_again() {
+    // Because the selection survives the first bracket, the second one wraps
+    // the same text instead of replacing it: `foo` -> `(foo)` -> `("foo")`.
+    let scratch = Scratch::new();
+    let mut app = app_with(&scratch, "foo");
+
+    ctrl(&mut app, 'a');
+    type_str(&mut app, "(");
+    type_str(&mut app, "\"");
+    assert_eq!(marked(&app), "(\"foo|\")");
+    assert_eq!(selection(&app).as_deref(), Some("foo"));
+}
+
+#[test]
+fn typing_after_a_surround_replaces_the_selection() {
+    // The other side of keeping it: the next character is typed over the text,
+    // exactly as it would have been before the surround.
+    let scratch = Scratch::new();
+    let mut app = app_with(&scratch, "foo");
+
+    ctrl(&mut app, 'a');
+    type_str(&mut app, "(");
+    type_str(&mut app, "x");
+    assert_eq!(marked(&app), "(x|)");
 }
 
 // ------------------------------------------------------------- backspace
@@ -271,6 +309,50 @@ fn a_pasted_bracket_is_not_completed() {
 
     app.handle_event(Event::Paste("(".into()));
     assert_eq!(text(&app), "(");
+}
+
+/// `Ctrl+Shift+A`, the way a terminal delivers it.
+fn toggle(app: &mut vela::app::App) {
+    press(
+        app,
+        KeyCode::Char('a'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    );
+}
+
+#[test]
+fn the_toggle_turns_the_rules_off_and_back_on() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+    assert!(app.config.editor.auto_pairs, "on by default");
+
+    toggle(&mut app);
+    assert!(!app.config.editor.auto_pairs);
+    assert!(
+        screen_has(&mut app, 80, 24, "Auto-close pairs off"),
+        "the change is announced"
+    );
+    type_str(&mut app, "(");
+    assert_eq!(text(&app), "(", "no pair while it is off");
+
+    toggle(&mut app);
+    assert!(app.config.editor.auto_pairs);
+    assert!(screen_has(&mut app, 80, 24, "Auto-close pairs on"));
+
+    // Clear the buffer and type the same character again.
+    ctrl(&mut app, 'a');
+    plain(&mut app, KeyCode::Delete);
+    type_str(&mut app, "[");
+    assert_eq!(marked(&app), "[|]", "the pair is back");
+}
+
+#[test]
+fn the_toggle_is_a_command_like_any_other() {
+    assert!(Command::ALL.contains(&Command::ToggleAutoPairs));
+    assert_eq!(Command::ToggleAutoPairs.id(), "edit.toggleAutoPairs");
+    assert!(Command::ToggleAutoPairs
+        .default_keys()
+        .contains(&"ctrl+shift+a"));
 }
 
 #[test]

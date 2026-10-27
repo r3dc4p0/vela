@@ -1141,6 +1141,13 @@ impl App {
                     on_off(self.config.editor.syntax_highlighting)
                 ));
             }
+            Command::ToggleAutoPairs => {
+                self.config.editor.auto_pairs = !self.config.editor.auto_pairs;
+                self.info(format!(
+                    "Auto-close pairs {}",
+                    on_off(self.config.editor.auto_pairs)
+                ));
+            }
             Command::ToggleHints => {
                 self.config.ui.show_hints = !self.config.ui.show_hints;
                 self.info(format!(

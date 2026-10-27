@@ -39,17 +39,18 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Alt+Up` / `Alt+Down` | `edit.moveLineUp` / `edit.moveLineDown` | Move lines |
 | `Tab` / `Shift+Tab` | — | Indent / dedent (inserts at the cursor without a selection) |
 | `Ctrl+Shift+W` | `view.wordCount` | Word, character and line count |
+| `Ctrl+Shift+A` | `edit.toggleAutoPairs` | Auto-close brackets and quotes on / off |
 
 ## Typing
 
-Brackets and quotes complete themselves. There is no key to press and no mode
-to be in; the rules apply to every keystroke, and `auto_pairs = false` turns the
-whole set off.
+Brackets and quotes complete themselves. There is no mode to be in; the rules
+apply to every keystroke, and `Ctrl+Shift+A` turns the whole set off for the
+session — the same thing as `auto_pairs = false` in the configuration file.
 
 | You type | What lands | Why |
 | --- | --- | --- |
 | `(` `[` `{` | `()`, `[]`, `{}` with the caret between | the pair is one object |
-| `(` with text selected | `(selected)` | a selection is surrounded, not replaced |
+| `(` with text selected | `(selected)`, still selected | a selection is surrounded, not replaced, and stays selected so it can be surrounded again |
 | `)` when the next character is `)` | nothing — the caret steps over it | so closing a pair does not double it |
 | `"` after a space, `(`, `[` or `{` | `""` with the caret between | a string can start here |
 | `"` after a letter, digit, `_`, `&`, `<` or a closing bracket | just `"` | `don't`, `3'` and `&'a` are punctuation, not strings |

@@ -150,12 +150,17 @@ impl Caret {
 /// exists for the edits whose text is not what the user is left standing in
 /// front of: typing `(` inserts `()`, and the caret belongs between them, one
 /// character before the end of what was written.
+///
+/// `anchor_back` does the same for the anchor, and only when there is one: an
+/// edit that surrounds a selection can leave that selection selected, so the
+/// next thing typed replaces the same text it would have replaced before.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaretEdit {
     pub range: Range<usize>,
     pub text: String,
     pub primary: bool,
     pub caret_back: usize,
+    pub anchor_back: Option<usize>,
 }
 
 impl CaretEdit {
@@ -165,6 +170,7 @@ impl CaretEdit {
             text: text.into(),
             primary,
             caret_back: 0,
+            anchor_back: None,
         }
     }
 
@@ -180,6 +186,16 @@ impl CaretEdit {
     /// text.
     pub fn leaving_caret_back(mut self, back: usize) -> Self {
         self.caret_back = back;
+        self
+    }
+
+    /// Keep a selection, its anchor this many characters before the end of the
+    /// inserted text.
+    ///
+    /// The anchor is measured from the same place as the caret, so the two
+    /// together say which part of the inserted text stays selected.
+    pub fn keeping_selection_back(mut self, back: usize) -> Self {
+        self.anchor_back = Some(back);
         self
     }
 }
@@ -983,9 +999,13 @@ impl Document {
             let start = edit.range.start.min(len);
             let end = edit.range.end.clamp(start, len);
             let inserted = edit.text.chars().count();
-            let back = edit.caret_back.min(inserted);
-            let pos = (start as isize + shift + (inserted - back) as isize).max(0) as usize;
-            placed.push((Caret::at(pos), edit.primary));
+            let place = |back: usize| {
+                let back = back.min(inserted);
+                (start as isize + shift + (inserted - back) as isize).max(0) as usize
+            };
+            let pos = place(edit.caret_back);
+            let anchor = edit.anchor_back.map(place);
+            placed.push((Caret { pos, anchor }, edit.primary));
             shift += inserted as isize - (end - start) as isize;
             plain.push(Edit::replace(edit.range.clone(), edit.text.clone()));
         }

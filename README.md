@@ -41,7 +41,9 @@ caret between them, a closer already under the caret is stepped over instead of
 doubled, backspace inside an empty pair removes both halves, and Enter between
 `{}` opens the block onto three lines. Quotes only pair where a string can
 start, so `don't` and Rust's `&'a` are left alone. Selecting text and typing a
-bracket surrounds it rather than replacing it. One setting, `auto_pairs`.
+bracket surrounds it rather than replacing it, and leaves it selected so a
+second bracket wraps it again. One setting, `auto_pairs`, or `Ctrl+Shift+A` to
+toggle it for the session.
 
 **Multi-cursor** — stack carets with `Ctrl+Alt+Up`/`Ctrl+Alt+Down`, add one per
 occurrence of the selection with `Ctrl+D`, or place them with `Alt+Click`.
