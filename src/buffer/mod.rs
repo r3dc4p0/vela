@@ -248,6 +248,12 @@ pub struct Document {
     disk_len: Option<u64>,
     /// Set when the file changed underneath us.
     externally_modified: bool,
+    /// How the file indents, once its own text has been read.
+    ///
+    /// `None` means "nothing was detected", which is the case for an untitled
+    /// buffer and for a file with no indentation: the editor then falls back to
+    /// the configured style.
+    indent: Option<crate::indent::IndentStyle>,
 }
 
 impl Document {
@@ -275,6 +281,7 @@ impl Document {
             disk_mtime: None,
             disk_len: None,
             externally_modified: false,
+            indent: None,
         }
     }
 
@@ -327,6 +334,16 @@ impl Document {
     }
 
     // ------------------------------------------------------------------ paths
+
+    /// How this buffer indents, when its own text said.
+    pub fn indent_style(&self) -> Option<crate::indent::IndentStyle> {
+        self.indent
+    }
+
+    /// Record how this buffer indents, or clear it.
+    pub fn set_indent_style(&mut self, style: Option<crate::indent::IndentStyle>) {
+        self.indent = style;
+    }
 
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()

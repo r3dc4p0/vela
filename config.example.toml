@@ -18,6 +18,12 @@ tab_width = 4
 use_spaces = true
 # Copy the current line's indentation onto the next line on Enter.
 auto_indent = true
+# Read each file's own indentation instead of trusting `use_spaces` and
+# `tab_width`. A tab-indented file edited with four spaces gets the wrong indent
+# on every Enter, so the file wins when its text says anything; the two settings
+# above then describe new buffers and files with no indentation. The status bar
+# says which one is in force: `Spaces: 2`, `Tabs`.
+detect_indent = true
 # Complete a typed bracket or quote with its pair: `(` writes `()` and leaves the
 # caret between them, a closer already under the caret is stepped over rather
 # than doubled, backspace inside an empty pair removes both halves, and Enter

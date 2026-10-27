@@ -21,6 +21,7 @@ use tracing::warn;
 
 use super::App;
 use crate::buffer::Document;
+use crate::indent;
 use crate::recovery::{self, Record};
 
 /// How long the editor waits after a change before copying the buffers out.
@@ -193,6 +194,10 @@ impl App {
     /// Put one recovered record back into the buffer list.
     fn apply_record(&mut self, record: Record) -> usize {
         let mut doc = Document::from_text(&record.text, record.path.clone());
+        // Same reading as a normal open: the recovered text is the file, so it
+        // is the evidence. Not stored in the record, because it is derivable
+        // from the text the record already carries.
+        doc.set_indent_style(indent::detect(&record.text, self.indent_options()));
         // It is *not* what is on disk: that is the whole point of the record.
         doc.invalidate_save_point();
         doc.set_disk_meta(record.mtime, record.path.as_ref().map(|_| record.file_len));

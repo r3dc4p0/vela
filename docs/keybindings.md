@@ -37,7 +37,7 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Ctrl+Shift+D` | `edit.duplicateLine` | Duplicate the current line or selection |
 | `Ctrl+Shift+K` | `edit.deleteLine` | Delete the current line or selection |
 | `Alt+Up` / `Alt+Down` | `edit.moveLineUp` / `edit.moveLineDown` | Move lines |
-| `Tab` / `Shift+Tab` | — | Indent / dedent (inserts at the cursor without a selection) |
+| `Tab` / `Shift+Tab` | — | Indent / dedent (inserts at the cursor without a selection); the unit is the one the file itself uses |
 | `Ctrl+Shift+W` | `view.wordCount` | Word, character and line count |
 | `Ctrl+Shift+A` | `edit.toggleAutoPairs` | Auto-close brackets and quotes on / off |
 

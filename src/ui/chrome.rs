@@ -413,6 +413,16 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
         doc.encoding().label().to_string(),
         theme.statusbar_fg,
     );
+    // What Tab will insert here. Worth the columns: a file whose indentation was
+    // read from its own text can disagree with the settings, and this is the
+    // only place that says so.
+    add_segment(
+        &mut left,
+        sep,
+        sep_colour,
+        app.indent_style().label(),
+        theme.statusbar_fg,
+    );
     if app.pane_count() > 1 {
         add_segment(
             &mut left,

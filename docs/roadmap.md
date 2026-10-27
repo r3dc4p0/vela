@@ -26,6 +26,8 @@ Ordered by what a user notices first, not by what is easiest.
 - Auto-closing brackets and quotes: pairs complete themselves, a closer under
   the caret is stepped over, backspace removes an empty pair whole, and Enter
   opens a bracket pair onto three lines
+- Indent detection: each file's own indentation (tabs or spaces, and how many)
+  is read at load and used by Tab, Shift+Tab, Enter and the pair expansion
 - Unit, integration, UI and property tests; Criterion benchmarks
 
 ## Next

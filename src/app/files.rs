@@ -21,6 +21,7 @@ use crate::buffer::Document;
 use crate::commands::Command;
 use crate::editing;
 use crate::filesystem::{self, LoadedFile};
+use crate::indent;
 use crate::ui::{Confirm, ConfirmAction, Level, Overlay, PathPrompt};
 
 /// How long an open may take before the loader panel appears.
@@ -131,8 +132,11 @@ pub struct OpenedBuffer {
 }
 
 /// Turn a freshly loaded file into a document, ready to install.
-fn build_document(path: &Path, loaded: LoadedFile) -> OpenedBuffer {
+fn build_document(path: &Path, loaded: LoadedFile, indent: indent::Options) -> OpenedBuffer {
     let mut doc = Document::from_text(&loaded.text, Some(path.to_path_buf()));
+    // The file's own indentation, read before the text is dropped: this is the
+    // last place it is cheap to look at.
+    doc.set_indent_style(indent::detect(&loaded.text, indent));
     doc.set_eol(loaded.eol);
     doc.set_encoding(loaded.encoding, loaded.bom);
     doc.set_disk_meta(loaded.mtime, Some(loaded.len));
@@ -152,6 +156,7 @@ impl App {
     /// result is merged in [`App::poll_jobs`].
     pub fn open_path(&mut self, path: PathBuf) {
         let path = self.resolve(&path);
+        let indent = self.indent_options();
 
         if let Some(idx) = self
             .buffers
@@ -175,7 +180,7 @@ impl App {
                 let result =
                     filesystem::load_with(&worker_path, |n| progress.set_done(n)).map(|loaded| {
                         progress.start_preparing();
-                        build_document(&worker_path, loaded)
+                        build_document(&worker_path, loaded, indent)
                     });
                 let _ = tx.send(Job::Opened {
                     generation,
@@ -195,7 +200,7 @@ impl App {
         match filesystem::load(&path) {
             Ok(loaded) => {
                 let name = path.display().to_string();
-                let opened = build_document(&path, loaded);
+                let opened = build_document(&path, loaded, indent);
                 self.install(path, opened);
                 self.success(format!("Opened {name}"));
             }

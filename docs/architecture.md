@@ -344,6 +344,35 @@ recovery and tests use, and `App::type_text` is the one keystrokes go through.
 That split is the reason a pasted `(` lands as one character — it came from a
 file that already had whatever it needed around it.
 
+### Indentation belongs to the file, not to the settings
+
+`use_spaces` and `tab_width` are global, and a global answer is wrong the moment
+somebody else's file is opened: a tab-indented Go file edited with four spaces
+gets the wrong indent on every Enter, silently, and the mistake compounds line
+by line. `src/indent.rs` reads the file's own convention once, at load;
+`Document` carries the result, and `App::indent_style()` prefers it, falling
+back to the configuration for new buffers and for files whose text says nothing.
+
+Two decisions:
+
+- **What is detected is the indent *unit*, not the display width.** Whether a
+  level is a tab or a run of spaces, and how many spaces. How wide a tab is
+  *drawn* stays a view setting: a tab-indented file is correct at any display
+  width, and changing it would move every column on screen for a reason that has
+  nothing to do with the file.
+- **The width comes from the *steps*, not from the indentation itself.** A body
+  at eight columns is not an eight-column indent when it sits two levels in; the
+  step from the line before it is what says four. When nothing ever steps
+  deeper, the shallowest indentation is the only evidence there is. A width
+  outside 1–8 is not an indent level at all — a pasted block, a continuation
+  line — and the reading is thrown away rather than guessed from.
+
+The scan is bounded (2 000 lines, 512 KiB) because it runs on the load path that
+has to stay fast for a two-gigabyte file, and the answer is in the first
+screenful of any real file. The status bar names the result — `Spaces: 2`,
+`Tabs` — because a detected style can disagree with the settings, and that is
+the only place which one is in force is visible.
+
 ### Crash recovery is a snapshot, not a journal
 
 Atomic saves protect the file being written. They do nothing for changes that
@@ -520,6 +549,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| Indentation | `tests/indent.rs`: a two-space file indents by two and a tab file by a tab, the file beats the settings, a new buffer uses them, `detect_indent = false` turns it off, a file with no indentation falls back, the status bar names the style, Enter and the pair expansion use the file's width, dedent removes one of its levels, and two buffers in one session keep their own styles |
 | Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded and stays selected (so it can be surrounded again), backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, `Ctrl+Shift+A` turns the rules off and on, and each of these holds at every caret |
 | Recovery | `tests/recovery.rs`: an unsaved buffer survives a crash with its text and cursor, a clean exit discards the snapshot, a saved buffer is not recovered, an untitled buffer comes back untitled, a file written after the snapshot wins over the copy, a snapshot is applied once, and nothing is written without persistence |
 | Panes | `tests/split.rs`: two panes of equal width with a divider between them, one buffer at two scroll positions, an edit visible in both panes, two buffers in two panes, click-to-focus, closing a pane and the refusal to close the last one, a closed buffer leaving no dangling pane index, and a split refused when the panes would be too narrow |

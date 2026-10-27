@@ -36,6 +36,14 @@ cut/copy/paste; undo/redo with coalescing and save-point tracking; duplicate,
 delete and move lines; indent/dedent; comment toggling; auto-indent; bracket
 matching; trailing-whitespace trimming; optional final newline.
 
+**Indentation** — every file's indentation is read when it opens: whether a
+level is a tab or a run of spaces, and how many spaces. Tab, Shift+Tab, Enter
+and the pair expansion then match the file rather than a global setting, so
+opening a two-space file or a tab-indented one does not start by fighting it.
+The status bar says which style is in force; `use_spaces` and `tab_width`
+describe new buffers and files whose text says nothing. Turn it off with
+`detect_indent = false`.
+
 **Typing** — brackets and quotes complete themselves: `(` writes `()` with the
 caret between them, a closer already under the caret is stepped over instead of
 doubled, backspace inside an empty pair removes both halves, and Enter between

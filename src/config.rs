@@ -43,6 +43,13 @@ pub struct EditorSettings {
     pub use_spaces: bool,
     /// Copy the previous line's indentation on Enter.
     pub auto_indent: bool,
+    /// Read each file's indentation instead of trusting the settings above.
+    ///
+    /// A tab-indented file edited with `use_spaces = true` gets the wrong
+    /// indent on every Enter, so the file's own text wins when it says
+    /// anything. `use_spaces` and `tab_width` then describe what *new* buffers
+    /// and files with no indentation use.
+    pub detect_indent: bool,
     /// Complete a typed bracket or quote with its pair.
     ///
     /// One switch for the whole behaviour: the closer is inserted with the
@@ -85,6 +92,7 @@ impl Default for EditorSettings {
             tab_width: 4,
             use_spaces: true,
             auto_indent: true,
+            detect_indent: true,
             auto_pairs: true,
             syntax_highlighting: true,
             scroll_off: 3,

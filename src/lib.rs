@@ -34,6 +34,7 @@ pub mod editing;
 pub mod error;
 pub mod filesystem;
 pub mod fuzzy;
+pub mod indent;
 pub mod input;
 pub mod keymap;
 pub mod logging;

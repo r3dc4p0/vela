@@ -30,6 +30,7 @@ use crate::clipboard::Clipboard;
 use crate::commands::Command;
 use crate::config::Config;
 use crate::editing;
+use crate::indent;
 use crate::input::{self, Action};
 use crate::keymap::Keymap;
 use crate::platform;
@@ -909,7 +910,7 @@ impl App {
         // it needs both settings: turning off auto-indent must not leave the
         // editor inserting indentation through the other switch.
         let expand = self.config.editor.auto_pairs && auto_indent;
-        let unit = self.config.indent_unit();
+        let unit = self.indent_unit();
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
@@ -917,8 +918,40 @@ impl App {
         self.after_edit();
     }
 
+    /// What the loader needs to know to read a file's indentation.
+    fn indent_options(&self) -> indent::Options {
+        indent::Options {
+            detect: self.config.editor.detect_indent,
+            fallback_width: self.config.tab_width(),
+        }
+    }
+
+    /// The indentation the active buffer is written with.
+    ///
+    /// A detected style wins over the configuration: the file in front of you
+    /// is better evidence than a global setting. The setting is what new
+    /// buffers, and files whose text says nothing, fall back to.
+    pub fn indent_style(&self) -> indent::IndentStyle {
+        self.active_doc()
+            .and_then(|doc| doc.indent_style())
+            .unwrap_or_else(|| indent::IndentStyle {
+                use_spaces: self.config.editor.use_spaces,
+                width: self.config.tab_width(),
+            })
+    }
+
+    /// The text one level of indentation inserts in the active buffer.
+    fn indent_unit(&self) -> String {
+        self.indent_style().unit()
+    }
+
+    /// Columns one level of indentation removes from the active buffer.
+    fn indent_width(&self) -> usize {
+        self.indent_style().width
+    }
+
     fn insert_tab(&mut self) {
-        let unit = self.config.indent_unit();
+        let unit = self.indent_unit();
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
@@ -935,7 +968,7 @@ impl App {
     }
 
     fn dedent(&mut self) {
-        let width = self.config.tab_width();
+        let width = self.indent_width();
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
@@ -1064,11 +1097,11 @@ impl App {
                 self.with_doc(editing::toggle_comment);
             }
             Command::Indent => {
-                let unit = self.config.indent_unit();
+                let unit = self.indent_unit();
                 self.with_doc(|d| editing::indent(d, &unit));
             }
             Command::Dedent => {
-                let width = self.config.tab_width();
+                let width = self.indent_width();
                 self.with_doc(|d| editing::dedent(d, width));
             }
             Command::TrimTrailingWhitespace => {

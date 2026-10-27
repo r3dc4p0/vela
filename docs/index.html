@@ -836,7 +836,7 @@
 
         <article class="card">
           <h3>Your file, byte for byte</h3>
-          <p>UTF-8 and UTF-16 with BOM detection, LF/CRLF/CR preserved per file, permissions and symlinks kept, binary files refused rather than corrupted.</p>
+          <p>UTF-8 and UTF-16 with BOM detection, LF/CRLF/CR preserved per file, permissions and symlinks kept, binary files refused rather than corrupted. The file's own indentation is read too, so <span class="inline-code">Tab</span> matches what is already there instead of a global setting.</p>
         </article>
 
         <article class="card">
@@ -949,7 +949,7 @@
 
         <ul class="next-list">
           <li><span class="tag soon">next</span><span>Live external-change detection via a filesystem watcher</span></li>
-          <li><span class="tag soon">next</span><span>Indent detection, so a tab-indented file is edited as one</span></li>
+          <li><span class="tag soon">next</span><span>Line transforms: sort, unique, join, upper/lower</span></li>
           <li><span class="tag">later</span><span>Incremental regex search on very large files</span></li>
           <li><span class="tag">later</span><span>LSP integration and a plugin surface</span></li>
         </ul>
