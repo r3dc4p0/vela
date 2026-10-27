@@ -125,6 +125,61 @@ fn a_quote_closes_the_one_it_is_inside() {
     assert_eq!(marked(&app), "\"hi\"|");
 }
 
+#[test]
+fn a_bracket_typed_inside_a_word_stays_one_character() {
+    let scratch = Scratch::new();
+    let mut app = app_with(&scratch, "hello");
+    // Between the two `l`s.
+    plain(&mut app, KeyCode::Left);
+    plain(&mut app, KeyCode::Left);
+    assert_eq!(marked(&app), "hel|lo");
+
+    type_str(&mut app, "(");
+    assert_eq!(
+        marked(&app),
+        "hel(|lo",
+        "a pair here would cut the word in half"
+    );
+    assert_eq!(text(&app), "hel(lo");
+}
+
+#[test]
+fn a_quote_typed_inside_a_word_stays_one_character() {
+    let scratch = Scratch::new();
+    let mut app = app_with(&scratch, "hello");
+    plain(&mut app, KeyCode::Left);
+    plain(&mut app, KeyCode::Left);
+
+    type_str(&mut app, "\"");
+    assert_eq!(text(&app), "hel\"lo");
+}
+
+#[test]
+fn a_bracket_typed_at_the_end_of_a_word_still_pairs() {
+    // The rule is about the *middle* of a word: the end of one is not the
+    // middle, and `hello()` is what typing `(` after `hello` means.
+    let scratch = Scratch::new();
+    let mut app = app_with(&scratch, "hello");
+    type_str(&mut app, "(");
+    assert_eq!(marked(&app), "hello(|)");
+}
+
+#[test]
+fn a_selection_inside_a_word_is_still_surrounded() {
+    // A selection is not a caret in a word: it is the thing being wrapped.
+    let scratch = Scratch::new();
+    let mut app = app_with(&scratch, "hello");
+    ctrl(&mut app, KeyCode::Home);
+    plain(&mut app, KeyCode::Right);
+    plain(&mut app, KeyCode::Right);
+    shift(&mut app, KeyCode::Right);
+    shift(&mut app, KeyCode::Right);
+    assert_eq!(selection(&app).as_deref(), Some("ll"));
+
+    type_str(&mut app, "(");
+    assert_eq!(marked(&app), "he(ll|)o");
+}
+
 // ------------------------------------------------------------ selections
 
 /// The selected text, if any.

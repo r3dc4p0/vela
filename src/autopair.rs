@@ -94,11 +94,18 @@ pub fn decide(typed: char, around: Around<'_>) -> Typed {
         return Typed::Step;
     }
 
+    // A caret between two letters is inside a word, and a pair there would cut
+    // it in half: `hel|lo` must not become `hel(|)lo`. The character is typed
+    // as it is, whatever it was.
+    if inside_a_word(around.before, around.after) {
+        return Typed::Plain;
+    }
+
     let Some(close) = closer_for(typed) else {
         return Typed::Plain;
     };
     // A quote only pairs where a string could plausibly start. A bracket pairs
-    // anywhere: `(` after a word is still an opening bracket.
+    // anywhere else: `(` after a word is still an opening bracket.
     if is_quote(typed) && !quote_starts_here(around.before) {
         return Typed::Plain;
     }
@@ -107,6 +114,19 @@ pub fn decide(typed: char, around: Around<'_>) -> Typed {
         caret_back: 1,
         anchor_back: None,
     }
+}
+
+/// True for the characters a word is made of.
+fn is_word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Whether the caret sits between two characters of one word.
+///
+/// Both sides have to be word characters: the end of a word is not the middle
+/// of one, so `hello|` still opens a pair, while `hel|lo` does not.
+fn inside_a_word(before: Option<char>, after: Option<char>) -> bool {
+    matches!((before, after), (Some(b), Some(a)) if is_word(b) && is_word(a))
 }
 
 /// Whether a quote typed after `before` starts a string rather than being
@@ -119,7 +139,7 @@ pub fn decide(typed: char, around: Around<'_>) -> Typed {
 fn quote_starts_here(before: Option<char>) -> bool {
     match before {
         None => true,
-        Some(c) => !(c.is_alphanumeric() || c == '_' || "&<>)]}'\"`".contains(c)),
+        Some(c) => !(is_word(c) || "&<>)]}'\"`".contains(c)),
     }
 }
 
@@ -249,9 +269,35 @@ mod tests {
     }
 
     #[test]
-    fn a_bracket_pairs_anywhere() {
+    fn a_bracket_pairs_at_the_edge_of_a_word() {
         assert_eq!(decide('(', at(Some('f'), None)), inserted("()", 1));
         assert_eq!(decide('[', at(Some(']'), None)), inserted("[]", 1));
+        assert_eq!(decide('(', at(Some('o'), Some(' '))), inserted("()", 1));
+        assert_eq!(decide('(', at(Some(' '), Some('o'))), inserted("()", 1));
+        assert_eq!(decide('(', at(None, Some('o'))), inserted("()", 1));
+    }
+
+    #[test]
+    fn a_pair_is_not_opened_inside_a_word() {
+        // `hel|lo` must not become `hel(|)lo`: the pair would cut the word in
+        // half, and the character typed there is just a character.
+        assert_eq!(decide('(', at(Some('l'), Some('l'))), Typed::Plain);
+        assert_eq!(decide('{', at(Some('1'), Some('2'))), Typed::Plain);
+        assert_eq!(decide('[', at(Some('a'), Some('_'))), Typed::Plain);
+        assert_eq!(decide('(', at(Some('_'), Some('b'))), Typed::Plain);
+        assert_eq!(decide('"', at(Some('a'), Some('b'))), Typed::Plain);
+    }
+
+    #[test]
+    fn a_selection_inside_a_word_is_still_surrounded() {
+        // The rule is about a caret between two letters. A selection is not a
+        // caret in a word: it is the thing being wrapped.
+        let around = Around {
+            before: Some('e'),
+            after: Some('o'),
+            selection: Some("ll"),
+        };
+        assert_eq!(decide('(', around), surrounded("(ll)", 1, 3));
     }
 
     #[test]

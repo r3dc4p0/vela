@@ -330,11 +330,14 @@ Three decisions carry the feature:
   stack, but the caret moves. That is why `apply_edits` places the carets even
   when it changed no text. Undo still sees a pair insertion as one step,
   because it was one `CaretEdit`.
-- **Quotes are conditional, brackets are not.** A quote only pairs where a
-  string can start — after whitespace, an opener, or punctuation that is not a
-  word character. `don't`, `3'` and Rust's `&'a` are the cases that make an
-  unconditional rule worse than no rule at all. A bracket pairs anywhere,
-  because `(` after a word is still an opening bracket.
+- **Quotes are conditional, brackets are not — and neither pairs inside a
+  word.** A quote only pairs where a string can start — after whitespace, an
+  opener, or punctuation that is not a word character: `don't`, `3'` and Rust's
+  `&'a` are the cases that make an unconditional rule worse than no rule at
+  all. A bracket pairs anywhere else, because `(` after a word is still an
+  opening bracket. But a caret *between* two word characters is inside a word,
+  and a pair there would cut it in half — `hel|lo` must not become `hel(|)lo`.
+  A selection is exempt: it is the thing being wrapped, not a point in a word.
 
 The rules never see a paste: `App::insert_text` is the raw path that paste,
 recovery and tests use, and `App::type_text` is the one keystrokes go through.
