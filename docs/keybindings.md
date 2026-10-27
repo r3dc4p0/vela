@@ -40,6 +40,32 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Tab` / `Shift+Tab` | — | Indent / dedent (inserts at the cursor without a selection) |
 | `Ctrl+Shift+W` | `view.wordCount` | Word, character and line count |
 
+## Typing
+
+Brackets and quotes complete themselves. There is no key to press and no mode
+to be in; the rules apply to every keystroke, and `auto_pairs = false` turns the
+whole set off.
+
+| You type | What lands | Why |
+| --- | --- | --- |
+| `(` `[` `{` | `()`, `[]`, `{}` with the caret between | the pair is one object |
+| `(` with text selected | `(selected)` | a selection is surrounded, not replaced |
+| `)` when the next character is `)` | nothing — the caret steps over it | so closing a pair does not double it |
+| `"` after a space, `(`, `[` or `{` | `""` with the caret between | a string can start here |
+| `"` after a letter, digit, `_`, `&`, `<` or a closing bracket | just `"` | `don't`, `3'` and `&'a` are punctuation, not strings |
+| `Enter` between `{}`, `[]` or `()` | the pair opens onto three lines, the closer on its own | the block has an inside |
+| `Backspace` between an empty pair | both halves | half a pair is never useful |
+
+Two boundaries are deliberate. **Paste is not typing**: a `(` that arrives from
+the clipboard lands as one character, because it came from a file that already
+had whatever it needed around it. And **the caret is a point**: typing a quote
+with no selection uses the character before it to decide, which is why `don't`
+works and `"don` starts a string.
+
+Opening a pair onto three lines needs `auto_indent` as well as `auto_pairs`,
+since it is indentation: with `auto_indent = false`, `Enter` between braces is
+just a newline.
+
 ## Mouse
 
 Mouse support is on by default; turn it off with `mouse = false` in the `[ui]`

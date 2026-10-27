@@ -18,6 +18,12 @@ tab_width = 4
 use_spaces = true
 # Copy the current line's indentation onto the next line on Enter.
 auto_indent = true
+# Complete a typed bracket or quote with its pair: `(` writes `()` and leaves the
+# caret between them, a closer already under the caret is stepped over rather
+# than doubled, backspace inside an empty pair removes both halves, and Enter
+# between a bracket pair opens it onto three lines. Quotes only pair where a
+# string can start, so `don't` and Rust's `&'a` are left alone.
+auto_pairs = true
 # Colour source code. Turning this off makes no difference to the text.
 syntax_highlighting = true
 # Rows of context kept above and below the cursor when scrolling.

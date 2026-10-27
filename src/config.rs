@@ -43,6 +43,14 @@ pub struct EditorSettings {
     pub use_spaces: bool,
     /// Copy the previous line's indentation on Enter.
     pub auto_indent: bool,
+    /// Complete a typed bracket or quote with its pair.
+    ///
+    /// One switch for the whole behaviour: the closer is inserted with the
+    /// opener, a closer already under the caret is stepped over instead of
+    /// doubled, backspace inside an empty pair removes both halves, and Enter
+    /// between a bracket pair opens it onto three lines. It is one idea — the
+    /// pair is a single object — so it is one setting.
+    pub auto_pairs: bool,
     /// Enable syntax highlighting.
     pub syntax_highlighting: bool,
     /// Keep this many lines above/below the cursor when scrolling.
@@ -77,6 +85,7 @@ impl Default for EditorSettings {
             tab_width: 4,
             use_spaces: true,
             auto_indent: true,
+            auto_pairs: true,
             syntax_highlighting: true,
             scroll_off: 3,
             relative_numbers: false,

@@ -7,6 +7,7 @@
 
 use std::ops::Range;
 
+use crate::autopair::{self, Typed};
 use crate::buffer::motion::{char_at_visual_col, visual_col_of};
 use crate::buffer::{Caret, CaretEdit, Document, Edit, TxKind};
 use crate::syntax::Language;
@@ -483,53 +484,123 @@ pub fn insert_at_carets(doc: &mut Document, text: &str) -> bool {
 }
 
 /// Insert a line break at every caret, honouring auto-indent.
-pub fn newline_at_carets(doc: &mut Document, auto_indent: bool) -> bool {
-    if !doc.has_multiple_carets() {
-        if auto_indent {
-            doc.insert_newline();
-        } else {
-            doc.insert_text("\n");
-        }
-        return true;
-    }
+///
+/// When `unit` is given, a caret sitting between a bracket pair opens it onto
+/// three lines instead: the closer moves down to its own line and the caret
+/// lands on an indented line between the two.
+pub fn newline_at_carets(doc: &mut Document, auto_indent: bool, unit: Option<&str>) -> bool {
     let primary = doc.primary_caret();
     let edits: Vec<CaretEdit> = doc
         .carets()
         .into_iter()
         .map(|caret| {
             let range = caret.selection().unwrap_or(caret.pos..caret.pos);
-            let text = if auto_indent {
-                newline_text(doc, range.start)
+            let opening = if range.is_empty() {
+                bracket_pair_at(doc, caret.pos)
             } else {
-                "\n".to_string()
+                None
             };
-            CaretEdit::new(range, text, caret == primary)
+            match opening {
+                Some((open, close)) if unit.is_some() && autopair::expands(open, close) => {
+                    let indent = doc.indent_at(caret.pos);
+                    let (text, back) = autopair::expanded_newline(&indent, unit.unwrap_or(""));
+                    CaretEdit::new(range, text, caret == primary).leaving_caret_back(back)
+                }
+                _ => {
+                    let text = if auto_indent {
+                        newline_text(doc, range.start)
+                    } else {
+                        "\n".to_string()
+                    };
+                    CaretEdit::new(range, text, caret == primary)
+                }
+            }
         })
         .collect();
     doc.apply_caret_edits(edits, TxKind::Other)
 }
 
+/// The bracket pair the position sits between, if it sits between one.
+fn bracket_pair_at(doc: &Document, pos: usize) -> Option<(char, char)> {
+    let before = pos.checked_sub(1).and_then(|i| doc.storage().char_at(i))?;
+    let after = doc.storage().char_at(pos)?;
+    (autopair::closer_for(before) == Some(after)).then_some((before, after))
+}
+
 /// The text a newline should insert when the caret sits at `at`: a line break
 /// plus the indentation of the line being split.
 fn newline_text(doc: &Document, at: usize) -> String {
-    let line = doc.storage().line_of_char(at);
-    let start = doc.storage().line_start(line);
-    let before = doc.storage().slice_chars(start, at);
-    if before.trim().is_empty() {
-        // Inside the indentation (or on an empty line): duplicating it would be
-        // surprising, so insert a bare line break.
-        return "\n".to_string();
-    }
-    let indent: String = before
-        .chars()
-        .take_while(|c| *c == ' ' || *c == '\t')
-        .collect();
+    let indent = doc.indent_at(at);
     format!("\n{indent}")
 }
 
+/// Type one character at every caret, applying the auto-pair rules.
+///
+/// Returns false when no caret wanted anything special, in which case the
+/// caller should fall back to a plain insertion — which is also the cheaper
+/// path, since it does not build a batch of edits for the common keystroke.
+pub fn type_char_at_carets(doc: &mut Document, typed: char) -> bool {
+    let primary = doc.primary_caret();
+    let mut special = false;
+    let edits: Vec<CaretEdit> = doc
+        .carets()
+        .into_iter()
+        .map(|caret| {
+            let range = caret.selection().unwrap_or(caret.pos..caret.pos);
+            let selection = (range.start < range.end)
+                .then(|| doc.storage().slice_chars(range.start, range.end));
+            let before = range
+                .start
+                .checked_sub(1)
+                .and_then(|i| doc.storage().char_at(i));
+            let after = doc.storage().char_at(range.end);
+            let decision = autopair::decide(
+                typed,
+                autopair::Around {
+                    before,
+                    after,
+                    selection: selection.as_deref(),
+                },
+            );
+            let is_primary = caret == primary;
+            match decision {
+                Typed::Plain => CaretEdit::new(range, typed.to_string(), is_primary),
+                Typed::Insert { text, caret_back } => {
+                    special = true;
+                    CaretEdit::new(range, text, is_primary).leaving_caret_back(caret_back)
+                }
+                Typed::Step => {
+                    special = true;
+                    // Replacing the closer with itself changes no text: it only
+                    // moves the caret past it, which is what makes a pair feel
+                    // like one object rather than two characters.
+                    CaretEdit::new(caret.pos..caret.pos + 1, typed.to_string(), is_primary)
+                }
+            }
+        })
+        .collect();
+    if !special {
+        return false;
+    }
+    doc.apply_caret_edits(edits, TxKind::Insert);
+    true
+}
+
 /// Delete one grapheme (or the selection) before every caret.
-pub fn backspace_at_carets(doc: &mut Document) -> bool {
+///
+/// With `delete_pairs`, a caret sitting inside an empty pair takes both halves:
+/// deleting the opener of `()` and leaving the `)` behind would leave the pair
+/// half-typed, which is never what backspace meant there.
+pub fn backspace_at_carets(doc: &mut Document, delete_pairs: bool) -> bool {
     if !doc.has_multiple_carets() {
+        // A selection is what backspace deletes first, pair or no pair: the two
+        // characters around the caret are not what the user selected.
+        if delete_pairs && !doc.has_selection() {
+            if let Some(range) = empty_pair_at(doc, doc.cursor()) {
+                doc.replace_range(range.start, range.end, "", TxKind::DeleteBack);
+                return true;
+            }
+        }
         doc.backspace();
         return true;
     }
@@ -540,17 +611,28 @@ pub fn backspace_at_carets(doc: &mut Document) -> bool {
         .map(|caret| {
             let range = match caret.selection() {
                 Some(sel) => sel,
-                None if caret.pos > 0 => {
-                    crate::buffer::motion::prev_grapheme(doc.storage(), caret.pos)..caret.pos
-                }
-                // Nothing to delete at the start of the buffer; the empty edit
-                // keeps the caret counted and in place.
-                None => caret.pos..caret.pos,
+                None => match empty_pair_at(doc, caret.pos) {
+                    Some(pair) if delete_pairs => pair,
+                    _ if caret.pos > 0 => {
+                        crate::buffer::motion::prev_grapheme(doc.storage(), caret.pos)..caret.pos
+                    }
+                    // Nothing to delete at the start of the buffer; the empty
+                    // edit keeps the caret counted and in place.
+                    _ => caret.pos..caret.pos,
+                },
             };
             CaretEdit::delete(range, caret == primary)
         })
         .collect();
     doc.apply_caret_edits(edits, TxKind::Other)
+}
+
+/// The two characters of the empty pair around `pos`, when the caret sits
+/// between one.
+fn empty_pair_at(doc: &Document, pos: usize) -> Option<Range<usize>> {
+    let before = pos.checked_sub(1).and_then(|i| doc.storage().char_at(i));
+    let after = doc.storage().char_at(pos);
+    autopair::deletes_pair(before, after).then(|| pos - 1..pos + 1)
 }
 
 /// Delete one grapheme (or the selection) after every caret.
@@ -968,7 +1050,7 @@ mod tests {
     #[test]
     fn backspace_deletes_before_every_caret() {
         let mut d = with_carets("abc\nabc\nabc", &[3, 7, 11]);
-        assert!(backspace_at_carets(&mut d));
+        assert!(backspace_at_carets(&mut d, false));
         assert_eq!(d.text(), "ab\nab\nab");
         assert_eq!(d.caret_count(), 3);
     }
@@ -976,7 +1058,7 @@ mod tests {
     #[test]
     fn backspace_at_the_buffer_start_is_safe() {
         let mut d = with_carets("ab", &[0, 2]);
-        assert!(backspace_at_carets(&mut d));
+        assert!(backspace_at_carets(&mut d, false));
         assert_eq!(d.text(), "a");
     }
 
@@ -990,7 +1072,7 @@ mod tests {
     #[test]
     fn newline_auto_indents_each_line() {
         let mut d = with_carets("    one\n    two", &[7, 15]);
-        assert!(newline_at_carets(&mut d, true));
+        assert!(newline_at_carets(&mut d, true, None));
         assert_eq!(d.text(), "    one\n    \n    two\n    ");
     }
 

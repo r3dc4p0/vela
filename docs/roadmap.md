@@ -12,6 +12,7 @@ Ordered by what a user notices first, not by what is easiest.
   dark/light themes, visible whitespace, indent guides, bracket matching
 - Auto-indent, comment toggling, duplicate/delete/move lines, trim whitespace
 - Multi-cursor: stacked carets, select-next-occurrence, Alt+Click, one undo step
+- Split panes: two columns sharing the buffer list, each with its own viewport
 - Mouse: click, drag-selection with edge autoscroll, double/triple-click,
   free wheel scrolling with an off-screen cursor indicator, tab switching
 - Word wrap, toggled at runtime: rows are the unit of scrolling, motion and
@@ -22,6 +23,9 @@ Ordered by what a user notices first, not by what is easiest.
 - External-modification detection at save time
 - Crash recovery: unsaved buffers are snapshotted to the data directory and come
   back after a crash, with the cursor; a clean exit discards the snapshot
+- Auto-closing brackets and quotes: pairs complete themselves, a closer under
+  the caret is stepped over, backspace removes an empty pair whole, and Enter
+  opens a bracket pair onto three lines
 - Unit, integration, UI and property tests; Criterion benchmarks
 
 ## Next
@@ -34,13 +38,7 @@ rename-based) should mark the buffer as externally modified within a second and
 offer reload/diff. Depends on: a small `Watcher` type owning the notify handle
 and feeding `App`'s existing job channel.
 
-### 2. Split views
-
-One window, two editor panes sharing the buffer list. The renderer already takes
-an `Area`, so the work is layout plus a focus model; the risk is key routing, so
-it needs its own tests.
-
-### 3. Incremental regex search on large files
+### 2. Incremental regex search on large files
 
 Regex currently rescans the whole buffer on each change. Chunked scanning with a
 resumable matcher would keep the same responsiveness as literal search.

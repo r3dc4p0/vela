@@ -36,6 +36,13 @@ cut/copy/paste; undo/redo with coalescing and save-point tracking; duplicate,
 delete and move lines; indent/dedent; comment toggling; auto-indent; bracket
 matching; trailing-whitespace trimming; optional final newline.
 
+**Typing** — brackets and quotes complete themselves: `(` writes `()` with the
+caret between them, a closer already under the caret is stepped over instead of
+doubled, backspace inside an empty pair removes both halves, and Enter between
+`{}` opens the block onto three lines. Quotes only pair where a string can
+start, so `don't` and Rust's `&'a` are left alone. Selecting text and typing a
+bracket surrounds it rather than replacing it. One setting, `auto_pairs`.
+
 **Multi-cursor** — stack carets with `Ctrl+Alt+Up`/`Ctrl+Alt+Down`, add one per
 occurrence of the selection with `Ctrl+D`, or place them with `Alt+Click`.
 Typing, deleting, indenting and newlines apply to every caret as a single undo

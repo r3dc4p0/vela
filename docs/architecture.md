@@ -306,6 +306,38 @@ instead cost eight seconds on an eighteen-million-line file, so the bound is
 deliberately local: it is re-measured every frame, which twenty rows can afford,
 and it never learns about text the user cannot see.
 
+### Auto-pairs are rules about the text, not a mode
+
+Typing a bracket has to decide something the buffer cannot answer: whether this
+`'` opens a string or ends a word. The decision lives in `src/autopair.rs` as a
+pure function over the two characters around the caret, the selected text, and
+nothing else — so the interesting cases are unit tests rather than keystroke
+scripts, and `editing::type_char_at_carets` is only the plumbing that turns a
+decision into a `CaretEdit` per caret.
+
+Three decisions carry the feature:
+
+- **The caret is the hard part, not the text.** `(` writes two characters and
+  leaves the caret between them, which no existing primitive could express:
+  `replace_range` puts the caret after everything it inserted. `CaretEdit` grew
+  a `caret_back` — how far to back up from the end of the inserted text — which
+  is also what makes Enter between `{}` land on the indented middle line.
+- **Stepping over a closer is not an edit.** It is expressed as replacing the
+  closer with itself: the batch sees no change, so nothing goes on the undo
+  stack, but the caret moves. That is why `apply_edits` places the carets even
+  when it changed no text. Undo still sees a pair insertion as one step,
+  because it was one `CaretEdit`.
+- **Quotes are conditional, brackets are not.** A quote only pairs where a
+  string can start — after whitespace, an opener, or punctuation that is not a
+  word character. `don't`, `3'` and Rust's `&'a` are the cases that make an
+  unconditional rule worse than no rule at all. A bracket pairs anywhere,
+  because `(` after a word is still an opening bracket.
+
+The rules never see a paste: `App::insert_text` is the raw path that paste,
+recovery and tests use, and `App::type_text` is the one keystrokes go through.
+That split is the reason a pasted `(` lands as one character — it came from a
+file that already had whatever it needed around it.
+
 ### Crash recovery is a snapshot, not a journal
 
 Atomic saves protect the file being written. They do nothing for changes that
@@ -482,6 +514,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded, backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, and each of these holds at every caret |
 | Recovery | `tests/recovery.rs`: an unsaved buffer survives a crash with its text and cursor, a clean exit discards the snapshot, a saved buffer is not recovered, an untitled buffer comes back untitled, a file written after the snapshot wins over the copy, a snapshot is applied once, and nothing is written without persistence |
 | Panes | `tests/split.rs`: two panes of equal width with a divider between them, one buffer at two scroll positions, an edit visible in both panes, two buffers in two panes, click-to-focus, closing a pane and the refusal to close the last one, a closed buffer leaving no dangling pane index, and a split refused when the panes would be too narrow |
 | Drawing styles | `tests/ui_style.rs`: both styles render the same words, the pixel style frames panels in hairlines where the block style boxes them, a title breaks its own rule, no row is spent on a border and no bar is underlined, and the toggle is announced |

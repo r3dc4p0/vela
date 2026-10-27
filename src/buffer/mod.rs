@@ -145,11 +145,17 @@ impl Caret {
 /// `primary` marks the edit produced by the primary caret: after the batch the
 /// primary caret lands at the end of that edit's text, which keeps the terminal
 /// cursor and the status bar where the user last was.
+///
+/// `caret_back` moves that landing point back by a number of characters. It
+/// exists for the edits whose text is not what the user is left standing in
+/// front of: typing `(` inserts `()`, and the caret belongs between them, one
+/// character before the end of what was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaretEdit {
     pub range: Range<usize>,
     pub text: String,
     pub primary: bool,
+    pub caret_back: usize,
 }
 
 impl CaretEdit {
@@ -158,6 +164,7 @@ impl CaretEdit {
             range,
             text: text.into(),
             primary,
+            caret_back: 0,
         }
     }
 
@@ -167,6 +174,13 @@ impl CaretEdit {
 
     pub fn delete(range: Range<usize>, primary: bool) -> Self {
         Self::new(range, String::new(), primary)
+    }
+
+    /// Leave the caret this many characters before the end of the inserted
+    /// text.
+    pub fn leaving_caret_back(mut self, back: usize) -> Self {
+        self.caret_back = back;
+        self
     }
 }
 
@@ -870,23 +884,29 @@ impl Document {
         }
     }
 
+    /// The indentation a new line at `at` should inherit.
+    ///
+    /// Empty when the position sits inside the line's own indentation, or on a
+    /// blank line: duplicating it there would be surprising, since the caret is
+    /// already where the next line should start.
+    pub fn indent_at(&self, at: usize) -> String {
+        let line = self.storage.line_of_char(at);
+        let start = self.storage.line_start(line);
+        let before = self.storage.slice_chars(start, at);
+        if before.trim().is_empty() {
+            return String::new();
+        }
+        before
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect()
+    }
+
     /// Insert a newline, keeping the current indentation (auto-indent).
     pub fn insert_newline(&mut self) {
-        let line = self.storage.line_of_char(self.cursor);
-        let start = self.storage.line_start(line);
-        let before = self.storage.slice_chars(start, self.cursor);
-        if before.trim().is_empty() {
-            // Cursor sits inside the indentation (or on an empty line): a plain
-            // newline is what the user wants, not duplicated indentation.
-            self.insert_text("\n");
-        } else {
-            let indent: String = before
-                .chars()
-                .take_while(|c| *c == ' ' || *c == '\t')
-                .collect();
-            let text = format!("\n{indent}");
-            self.insert_text(&text);
-        }
+        let indent = self.indent_at(self.cursor);
+        let text = format!("\n{indent}");
+        self.insert_text(&text);
     }
 
     /// Delete the selection, or the grapheme before the cursor.
@@ -963,7 +983,8 @@ impl Document {
             let start = edit.range.start.min(len);
             let end = edit.range.end.clamp(start, len);
             let inserted = edit.text.chars().count();
-            let pos = (start as isize + shift + inserted as isize).max(0) as usize;
+            let back = edit.caret_back.min(inserted);
+            let pos = (start as isize + shift + (inserted - back) as isize).max(0) as usize;
             placed.push((Caret::at(pos), edit.primary));
             shift += inserted as isize - (end - start) as isize;
             plain.push(Edit::replace(edit.range.clone(), edit.text.clone()));
@@ -1023,6 +1044,17 @@ impl Document {
         }
 
         if changes.is_empty() {
+            // The text did not change, but the caller may still have asked for
+            // the carets to move — typing a closing bracket over the one that is
+            // already there is exactly that, and it is expressed as replacing
+            // the bracket with itself. A move is not an edit, so nothing goes on
+            // the undo stack; returning false says the text is unchanged.
+            let len = self.len_chars();
+            self.cursor = primary_after.pos.min(len);
+            self.anchor = primary_after.anchor.map(|a| a.min(len));
+            self.set_extra_carets(extra_after);
+            self.preferred_col = None;
+            self.attach_view();
             return false;
         }
         changes.reverse();

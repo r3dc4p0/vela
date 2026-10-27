@@ -826,7 +826,7 @@
 
         <article class="card">
           <h3>Nothing gets lost</h3>
-          <p>Saves are atomic: temp file, <span class="inline-code">fsync</span>, rename. A failed write leaves the original untouched and the buffer dirty &mdash; never a truncated file.</p>
+          <p>Saves are atomic: temp file, <span class="inline-code">fsync</span>, rename, so a failed write leaves the original untouched &mdash; never a truncated file. Unsaved buffers are copied aside a second after they change, so a crash or a closed terminal brings them back, dirty, at the cursor they had.</p>
         </article>
 
         <article class="card">
@@ -850,8 +850,8 @@
         </article>
 
         <article class="card">
-          <h3>Picks up where you left off</h3>
-          <p>Recent files and the last session are restored on start, so closing the editor is not the same as losing your place.</p>
+          <h3>Brackets that close themselves</h3>
+          <p>Type <span class="inline-code">(</span> and you get <span class="inline-code">()</span> with the caret inside; type <span class="inline-code">)</span> over the one already there and you step past it instead of doubling it. <span class="inline-code">Backspace</span> takes an empty pair whole, and <span class="inline-code">Enter</span> opens <span class="inline-code">{}</span> onto three lines. Quotes only pair where a string can start, so <span class="inline-code">don't</span> stays a word.</p>
         </article>
 
         <article class="card">
@@ -948,7 +948,7 @@
 
         <ul class="next-list">
           <li><span class="tag soon">next</span><span>Live external-change detection via a filesystem watcher</span></li>
-          <li><span class="tag soon">next</span><span>Split views</span></li>
+          <li><span class="tag soon">next</span><span>Indent detection, so a tab-indented file is edited as one</span></li>
           <li><span class="tag">later</span><span>Incremental regex search on very large files</span></li>
           <li><span class="tag">later</span><span>LSP integration and a plugin surface</span></li>
         </ul>

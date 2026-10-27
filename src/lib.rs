@@ -25,6 +25,7 @@
 //! | [`logging`]    | file based diagnostics                                     |
 
 pub mod app;
+pub mod autopair;
 pub mod buffer;
 pub mod clipboard;
 pub mod commands;

@@ -486,7 +486,7 @@ impl App {
 
         let action = input::translate(&key, &self.keymap);
         match action {
-            Action::InsertText(text) => self.insert_text(&text),
+            Action::InsertText(text) => self.type_text(&text),
             Action::InsertNewline => self.insert_newline(),
             Action::InsertTab => self.insert_tab(),
             Action::Dedent => self.dedent(),
@@ -864,6 +864,11 @@ impl App {
 
     // ------------------------------------------------------------ edit paths
 
+    /// Insert text at the cursor, as-is.
+    ///
+    /// This is the raw path: paste, recovery and tests use it, and a pasted
+    /// `(` must stay one character. Typing goes through [`App::type_text`],
+    /// which is where the auto-pair rules live.
     pub fn insert_text(&mut self, text: &str) {
         if text.is_empty() {
             return;
@@ -875,12 +880,40 @@ impl App {
         self.after_edit();
     }
 
-    fn insert_newline(&mut self) {
-        let auto = self.config.editor.auto_indent;
+    /// Insert one typed keystroke, letting the auto-pair rules see it first.
+    fn type_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let mut chars = text.chars();
+        let single = chars.next().filter(|_| chars.next().is_none());
+        let auto_pairs = self.config.editor.auto_pairs;
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        editing::newline_at_carets(doc, auto);
+        if auto_pairs {
+            if let Some(typed) = single {
+                if editing::type_char_at_carets(doc, typed) {
+                    self.after_edit();
+                    return;
+                }
+            }
+        }
+        editing::insert_at_carets(doc, text);
+        self.after_edit();
+    }
+
+    fn insert_newline(&mut self) {
+        let auto_indent = self.config.editor.auto_indent;
+        // Opening a pair onto three lines is auto-indent applied to a pair, so
+        // it needs both settings: turning off auto-indent must not leave the
+        // editor inserting indentation through the other switch.
+        let expand = self.config.editor.auto_pairs && auto_indent;
+        let unit = self.config.indent_unit();
+        let Some(doc) = self.active_doc_mut() else {
+            return;
+        };
+        editing::newline_at_carets(doc, auto_indent, expand.then_some(unit.as_str()));
         self.after_edit();
     }
 
@@ -911,10 +944,11 @@ impl App {
     }
 
     fn backspace(&mut self) {
+        let delete_pairs = self.config.editor.auto_pairs;
         let Some(doc) = self.active_doc_mut() else {
             return;
         };
-        editing::backspace_at_carets(doc);
+        editing::backspace_at_carets(doc, delete_pairs);
         self.after_edit();
     }
 
