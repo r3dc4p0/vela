@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 
 use common::*;
 use crossterm::event::{KeyCode, KeyModifiers};
-use vela::app::App;
-use vela::search::LIVE_MATCHES;
+use vibe::app::App;
+use vibe::search::LIVE_MATCHES;
 
 /// One match per line, and enough of them to overflow the live scan.
 const TOTAL: usize = LIVE_MATCHES + 100;

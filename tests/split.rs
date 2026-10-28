@@ -11,7 +11,7 @@ mod common;
 use common::*;
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
-use vela::commands::Command;
+use vibe::commands::Command;
 
 fn numbered(count: usize) -> String {
     (1..=count)
@@ -21,12 +21,12 @@ fn numbered(count: usize) -> String {
 }
 
 /// Split the active pane with the real key, so the binding is covered too.
-fn split(app: &mut vela::app::App) {
+fn split(app: &mut vibe::app::App) {
     press(app, KeyCode::Char('\\'), KeyModifiers::CONTROL);
 }
 
 /// One pane's slice of every rendered row.
-fn pane_rows(app: &mut vela::app::App, width: u16, height: u16, pane: usize) -> Vec<String> {
+fn pane_rows(app: &mut vibe::app::App, width: u16, height: u16, pane: usize) -> Vec<String> {
     let rows = screen(app, width, height);
     let rect = app.panes[pane].rect;
     rows.iter()
@@ -41,7 +41,7 @@ fn pane_rows(app: &mut vela::app::App, width: u16, height: u16, pane: usize) -> 
         .collect()
 }
 
-fn click(app: &mut vela::app::App, column: u16, row: u16) {
+fn click(app: &mut vibe::app::App, column: u16, row: u16) {
     app.handle_event(Event::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column,
@@ -50,7 +50,7 @@ fn click(app: &mut vela::app::App, column: u16, row: u16) {
     }));
 }
 
-fn wheel(app: &mut vela::app::App, kind: MouseEventKind) {
+fn wheel(app: &mut vibe::app::App, kind: MouseEventKind) {
     app.handle_event(Event::Mouse(MouseEvent {
         kind,
         column: 0,
@@ -372,9 +372,9 @@ fn the_focused_pane_carries_the_accent_on_its_divider() {
 
     let left = app.panes[0].rect;
     let divider_x = left.x + left.width;
-    let theme = vela::ui::theme_of(&app).clone();
+    let theme = vibe::ui::theme_of(&app).clone();
     let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, &mut app)).unwrap();
     let buf = terminal.backend().buffer().clone();
     assert_eq!(
         buf[(divider_x, left.y)].fg,
@@ -384,7 +384,7 @@ fn the_focused_pane_carries_the_accent_on_its_divider() {
 
     app.execute(Command::FocusPaneLeft);
     let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, &mut app)).unwrap();
     let buf = terminal.backend().buffer().clone();
     assert_eq!(
         buf[(divider_x, left.y)].fg,
@@ -425,7 +425,7 @@ fn tiny_windows_survive_a_split() {
         assert!(
             app.panes
                 .iter()
-                .all(|p: &vela::app::Pane| p.rect.width <= w),
+                .all(|p: &vibe::app::Pane| p.rect.width <= w),
             "no pane is wider than the window"
         );
     }
@@ -615,7 +615,7 @@ fn the_caret_is_placed_in_the_focused_pane() {
     let _ = screen(&mut app, 80, 24);
 
     let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, &mut app)).unwrap();
     let caret = terminal.get_cursor_position().expect("a cursor position");
     let right = app.panes[1].rect;
     let left = app.panes[0].rect;
@@ -628,7 +628,7 @@ fn the_caret_is_placed_in_the_focused_pane() {
     // It follows the focus, rather than staying where it was drawn.
     app.execute(Command::FocusPaneLeft);
     let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, &mut app)).unwrap();
     let caret = terminal.get_cursor_position().expect("a cursor position");
     assert!(
         left.contains(caret),

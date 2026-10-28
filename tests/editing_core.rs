@@ -278,7 +278,7 @@ fn save_preserves_crlf_line_endings() {
     let path = scratch.file("dos.txt", "one\r\ntwo\r\n");
     let mut app = editor(scratch.path());
     open(&mut app, &path);
-    assert_eq!(app.active_doc().unwrap().eol(), vela::filesystem::Eol::CrLf);
+    assert_eq!(app.active_doc().unwrap().eol(), vibe::filesystem::Eol::CrLf);
 
     ctrl(&mut app, KeyCode::Home);
     plain(&mut app, KeyCode::Down);
@@ -354,9 +354,9 @@ fn toggle_comment_uses_the_language_syntax() {
     let path = scratch.file("code.rs", "fn main() {}\n");
     let mut app = editor(scratch.path());
     open(&mut app, &path);
-    app.execute(vela::commands::Command::ToggleComment);
+    app.execute(vibe::commands::Command::ToggleComment);
     assert_eq!(text(&app), "// fn main() {}\n");
-    app.execute(vela::commands::Command::ToggleComment);
+    app.execute(vibe::commands::Command::ToggleComment);
     assert_eq!(text(&app), "fn main() {}\n");
 }
 
@@ -367,7 +367,7 @@ fn duplicate_line_copies_the_current_line() {
     type_str(&mut app, "a\nb\nc");
     ctrl(&mut app, KeyCode::Home);
     plain(&mut app, KeyCode::Down);
-    app.execute(vela::commands::Command::DuplicateLine);
+    app.execute(vibe::commands::Command::DuplicateLine);
     assert_eq!(text(&app), "a\nb\nb\nc");
     assert_eq!(cursor_1(&app).0, 3, "the cursor stays on the duplicate");
 }
@@ -393,7 +393,7 @@ fn delete_line_removes_the_whole_line() {
     type_str(&mut app, "a\nb\nc");
     ctrl(&mut app, KeyCode::Home);
     plain(&mut app, KeyCode::Down);
-    app.execute(vela::commands::Command::DeleteLine);
+    app.execute(vibe::commands::Command::DeleteLine);
     assert_eq!(text(&app), "a\nc");
 }
 

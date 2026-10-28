@@ -44,7 +44,7 @@ pub fn init(dir: &Path, verbose: bool, quiet: bool) -> LogGuard {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let file = dir.join(format!("vela-{}-{stamp}.log", std::process::id()));
+    let file = dir.join(format!("vibe-{}-{stamp}.log", std::process::id()));
 
     let appender = match std::fs::OpenOptions::new()
         .create(true)
@@ -82,7 +82,7 @@ pub fn init(dir: &Path, verbose: bool, quiet: bool) -> LogGuard {
     tracing::info!(
         version = crate::VERSION,
         os = crate::platform::os_name(),
-        "vela starting"
+        "vibe starting"
     );
 
     LogGuard {

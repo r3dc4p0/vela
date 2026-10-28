@@ -160,7 +160,7 @@ impl Theme {
     /// The default dark palette: deep blue-grey surfaces, warm accents.
     pub fn dark() -> Self {
         Self {
-            name: "vela-dark".to_string(),
+            name: "vibe-dark".to_string(),
             dark: true,
 
             bg: Color::Rgb(0x14, 0x17, 0x1e),
@@ -239,7 +239,7 @@ impl Theme {
     /// A light palette for bright terminals.
     pub fn light() -> Self {
         Self {
-            name: "vela-light".to_string(),
+            name: "vibe-light".to_string(),
             dark: false,
 
             bg: Color::Rgb(0xfa, 0xfa, 0xf7),
@@ -313,15 +313,21 @@ impl Theme {
     /// Look a theme up by name.
     pub fn by_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
-            "dark" | "vela-dark" | "default" => Some(Self::dark()),
-            "light" | "vela-light" => Some(Self::light()),
+            "dark" | "vibe-dark" | "default" => Some(Self::dark()),
+            "light" | "vibe-light" => Some(Self::light()),
+            // The names from before the rename. The configuration file moves
+            // with the directory, so it still says `theme = "vela-dark"`, and
+            // an unknown name would fall back to the default and silently turn
+            // a light setup dark.
+            "vela-dark" => Some(Self::dark()),
+            "vela-light" => Some(Self::light()),
             _ => None,
         }
     }
 
     /// Names of the built-in themes.
     pub fn builtin_names() -> &'static [&'static str] {
-        &["vela-dark", "vela-light"]
+        &["vibe-dark", "vibe-light"]
     }
 
     /// Apply `key = "#rrggbb"` overrides from configuration.
@@ -410,6 +416,23 @@ impl Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_names_from_before_the_rename_still_resolve() {
+        // A configuration file that moved with the directory still says
+        // `vela-dark`; falling back to the default would turn a light setup
+        // dark without saying so.
+        assert_eq!(
+            Theme::by_name("vela-dark").map(|t| t.name),
+            Some("vibe-dark".into())
+        );
+        assert_eq!(
+            Theme::by_name("vela-light").map(|t| t.name),
+            Some("vibe-light".into())
+        );
+        assert!(Theme::by_name("vibe-dark").is_some());
+        assert!(Theme::by_name("nonsense").is_none());
+    }
 
     #[test]
     fn parses_hex_colours() {

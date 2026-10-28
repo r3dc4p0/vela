@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn a_clean_buffer_produces_no_record() {
-        let dir = std::env::temp_dir().join(format!("vela-rec-a-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("vibe-rec-a-{}", std::process::id()));
         let mut app = app(&dir);
         assert!(Record::from_document(&app.buffers[0]).is_none());
         app.insert_text("changed");
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn the_generation_follows_the_buffers() {
-        let dir = std::env::temp_dir().join(format!("vela-rec-g-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("vibe-rec-g-{}", std::process::id()));
         let mut app = app(&dir);
         let clean = app.recovery_generation();
         app.insert_text("x");

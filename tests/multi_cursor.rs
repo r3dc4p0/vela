@@ -18,11 +18,11 @@ use ratatui::Terminal;
 const CTRL_ALT: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::ALT);
 const CTRL_SHIFT: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::SHIFT);
 
-fn ctrl_alt(app: &mut vela::app::App, code: KeyCode) {
+fn ctrl_alt(app: &mut vibe::app::App, code: KeyCode) {
     press(app, code, CTRL_ALT);
 }
 
-fn ctrl_shift(app: &mut vela::app::App, code: KeyCode) {
+fn ctrl_shift(app: &mut vibe::app::App, code: KeyCode) {
     press(app, code, CTRL_SHIFT);
 }
 
@@ -31,25 +31,25 @@ fn key_of(code: KeyCode, mods: KeyModifiers, kind: KeyEventKind) -> Event {
     Event::Key(KeyEvent::new_with_kind(code, mods, kind))
 }
 
-fn caret_positions(app: &vela::app::App) -> Vec<usize> {
+fn caret_positions(app: &vibe::app::App) -> Vec<usize> {
     app.active_doc()
         .map(|d| d.carets().iter().map(|c| c.pos).collect())
         .unwrap_or_default()
 }
 
-fn caret_count(app: &vela::app::App) -> usize {
+fn caret_count(app: &vibe::app::App) -> usize {
     app.active_doc().map(|d| d.caret_count()).unwrap_or(0)
 }
 
 /// Alt+Click at a buffer position, assuming an editor area of 80x20 at 0,0 and
 /// a three-digit gutter.
-fn alt_click(app: &mut vela::app::App, line: usize, col: usize) {
+fn alt_click(app: &mut vibe::app::App, line: usize, col: usize) {
     app.set_editor_area(Rect::new(0, 0, 80, 20));
     // Asked of the same function the renderer uses, so a change to the gutter
     // moves the clicks with it.
     let gutter = {
         let doc = app.active_doc().expect("a buffer");
-        vela::ui::editor::gutter_width(doc.line_count(), &app.config)
+        vibe::ui::editor::gutter_width(doc.line_count(), &app.config)
     };
     app.handle_event(Event::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
@@ -434,7 +434,7 @@ fn secondary_cursors_are_painted_as_blocks() {
 
     let cursor_bg = app.theme.cursor_bg;
     let mut terminal = Terminal::new(TestBackend::new(40, 10)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, &mut app)).unwrap();
     let buffer = terminal.backend().buffer();
 
     let mut blocks = 0;

@@ -5,10 +5,10 @@
 //! search range validity, and EOL round-tripping.
 
 use proptest::prelude::*;
-use vela::buffer::wrap::LineLayout;
-use vela::buffer::{Document, Motion, MotionCtx};
-use vela::filesystem::{self, Encoding, Eol};
-use vela::search::{find_all, Query};
+use vibe::buffer::wrap::LineLayout;
+use vibe::buffer::{Document, Motion, MotionCtx};
+use vibe::filesystem::{self, Encoding, Eol};
+use vibe::search::{find_all, Query};
 
 /// A short string built from a mix of ASCII, accented Latin and CJK text so
 /// char/byte confusion shows up immediately.
@@ -85,7 +85,7 @@ proptest! {
                 let seg = layout.segments()[row];
                 let col = layout.chars()[seg.char_off..i]
                     .iter()
-                    .fold(seg.start_col, |c, &ch| c + vela::buffer::motion::char_width(ch, c, 4))
+                    .fold(seg.start_col, |c, &ch| c + vibe::buffer::motion::char_width(ch, c, 4))
                     - seg.start_col;
                 prop_assert_eq!(layout.pos_at(row, col, 4), i);
             }

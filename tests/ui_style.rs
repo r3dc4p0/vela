@@ -13,27 +13,27 @@ mod common;
 use common::*;
 use ratatui::buffer::Buffer;
 use ratatui::style::Modifier;
-use vela::commands::Command;
-use vela::config::UiStyle;
+use vibe::commands::Command;
+use vibe::config::UiStyle;
 
-fn pixel(dir: &std::path::Path) -> vela::app::App {
+fn pixel(dir: &std::path::Path) -> vibe::app::App {
     editor_with(dir, |c| c.ui.style = "pixel".to_string())
 }
 
-fn cell(dir: &std::path::Path) -> vela::app::App {
+fn cell(dir: &std::path::Path) -> vibe::app::App {
     editor_with(dir, |c| c.ui.style = "cell".to_string())
 }
 
 /// Render one frame and hand back the cells, for assertions that need colours
 /// or modifiers rather than text.
-fn cells(app: &mut vela::app::App, width: u16, height: u16) -> Buffer {
+fn cells(app: &mut vibe::app::App, width: u16, height: u16) -> Buffer {
     let mut terminal =
         ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, app)).unwrap();
     terminal.backend().buffer().clone()
 }
 
-fn dump(app: &mut vela::app::App, width: u16, height: u16) {
+fn dump(app: &mut vibe::app::App, width: u16, height: u16) {
     for (i, row) in screen(app, width, height).iter().enumerate() {
         println!("{i:>2}|{row}|");
     }
@@ -49,7 +49,7 @@ fn status_index(rows: &[String]) -> usize {
 #[test]
 fn pixel_is_the_default_and_the_old_style_is_opt_in() {
     let scratch = Scratch::new();
-    assert_eq!(vela::config::Config::default().ui_style(), UiStyle::Pixel);
+    assert_eq!(vibe::config::Config::default().ui_style(), UiStyle::Pixel);
     assert_eq!(editor(scratch.path()).config.ui_style(), UiStyle::Pixel);
     assert_eq!(cell(scratch.path()).config.ui_style(), UiStyle::Cell);
 }
@@ -83,7 +83,7 @@ fn both_styles_say_the_same_things() {
         dump(&mut app, 80, 24);
         let all = rows.join("\n");
         for needle in [
-            "VELA",
+            "VIBE",
             "hello.txt",
             "hello world",
             "Ln 1, Col 1",
@@ -100,7 +100,7 @@ fn the_pixel_style_frames_panels_with_hairlines_where_the_cell_style_boxes_them(
     let scratch = Scratch::new();
 
     let mut app = pixel(scratch.path());
-    app.open_palette(vela::ui::PaletteMode::Commands);
+    app.open_palette(vibe::ui::PaletteMode::Commands);
     let rows = screen(&mut app, 80, 24);
     dump(&mut app, 80, 24);
     let all = rows.join("\n");
@@ -110,7 +110,7 @@ fn the_pixel_style_frames_panels_with_hairlines_where_the_cell_style_boxes_them(
     assert!(!all.contains('│'), "no box sides:\n{all}");
 
     let mut app = cell(scratch.path());
-    app.open_palette(vela::ui::PaletteMode::Commands);
+    app.open_palette(vibe::ui::PaletteMode::Commands);
     let rows = screen(&mut app, 80, 24);
     let all = rows.join("\n");
     assert!(all.contains('┌') && all.contains('│'), "{all}");
@@ -121,10 +121,10 @@ fn the_pixel_style_frames_panels_with_hairlines_where_the_cell_style_boxes_them(
 fn a_panel_title_breaks_the_rule_instead_of_sitting_on_it() {
     let scratch = Scratch::new();
     let mut app = pixel(scratch.path());
-    app.open_palette(vela::ui::PaletteMode::Commands);
+    app.open_palette(vibe::ui::PaletteMode::Commands);
     let buf = cells(&mut app, 80, 24);
 
-    let panel = vela::ui::chrome::centered(ratatui::layout::Rect::new(0, 0, 80, 24), 80, 60);
+    let panel = vibe::ui::chrome::centered(ratatui::layout::Rect::new(0, 0, 80, 24), 80, 60);
     let top: String = (panel.x..panel.x + panel.width)
         .map(|x| buf[(x, panel.y)].symbol())
         .collect();
@@ -222,7 +222,7 @@ fn the_divider_belongs_to_the_tab_it_precedes() {
     let _ = screen(&mut app, 80, 24);
 
     let tabs = app.tabs_area();
-    let spans = vela::ui::chrome::tab_spans(&app, tabs);
+    let spans = vibe::ui::chrome::tab_spans(&app, tabs);
     assert_eq!(spans.len(), 2);
     assert_eq!(spans[0].x, 0, "the first tab starts at the edge");
     assert_eq!(
@@ -263,7 +263,7 @@ fn the_gutter_rule_is_paid_for_by_the_pixel_style_alone() {
         let col = row[..byte].chars().count() as u16;
         let gutter = {
             let doc = app.active_doc().expect("a buffer");
-            vela::ui::editor::gutter_width(doc.line_count(), &app.config)
+            vibe::ui::editor::gutter_width(doc.line_count(), &app.config)
         };
         assert_eq!(
             app.editor_area().x + gutter,

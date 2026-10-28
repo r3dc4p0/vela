@@ -1,6 +1,6 @@
 # Architecture
 
-Vela is a layered application. Each layer has one job, and the dependencies only
+Vibe is a layered application. Each layer has one job, and the dependencies only
 ever point one way.
 
 ```
@@ -219,7 +219,7 @@ most of the load time: the text is *moved* into a `String` instead of copied
 skips line-ending detection and normalisation entirely — one `memchr` answers
 both questions, where the old code scanned the file three times and allocated a
 copy to ask whether `\r\n` appeared alongside a bare `\n`. Together with the
-rope build moving off the UI thread, opening `/tmp/vela-big.txt` (2 GB) went
+rope build moving off the UI thread, opening `/tmp/vibe-big.txt` (2 GB) went
 from 6.7 s to 1.2 s, with the longest frame during the load at 0.44 ms.
 
 ### Display-width-correct rendering

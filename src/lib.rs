@@ -1,6 +1,6 @@
-//! Vela — a modern, fast terminal text editor.
+//! Vibe — a modern, fast terminal text editor.
 //!
-//! The crate is split into a reusable library (`vela`) and a thin binary
+//! The crate is split into a reusable library (`vibe`) and a thin binary
 //! (`src/main.rs`). Everything that is not terminal I/O is testable without a
 //! TTY, which is why the editor core lives here rather than in `main`.
 //!
@@ -49,7 +49,7 @@ pub mod ui;
 pub use error::{Error, Result};
 
 /// Application name used in the UI and in paths.
-pub const APP_NAME: &str = "vela";
+pub const APP_NAME: &str = "vibe";
 
 /// Semantic version, shown in the top bar and `--version`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,20 +1,20 @@
 [package]
-name = "vela"
+name = "vibe"
 version = "0.6.0"
 edition = "2021"
 rust-version = "1.82"
-description = "Vela — a modern, fast terminal text editor with familiar keyboard shortcuts"
+description = "Vibe — a modern, fast terminal text editor with familiar keyboard shortcuts"
 license = "MIT"
 keywords = ["editor", "tui", "terminal", "text"]
 categories = ["command-line-utilities", "text-editors"]
 readme = "README.md"
 
 [[bin]]
-name = "vela"
+name = "vibe"
 path = "src/main.rs"
 
 [lib]
-name = "vela"
+name = "vibe"
 path = "src/lib.rs"
 
 [dependencies]

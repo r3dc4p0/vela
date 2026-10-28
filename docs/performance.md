@@ -6,7 +6,7 @@
 - **Toolchain**: rustc 1.90.0, `[profile.bench]` = opt-level 3, thin LTO,
   codegen-units 1, debug symbols on.
 - **Benchmarks**: Criterion (`benches/core_bench.rs`), warm-up 1 s, measurement
-  3 s. Run with `cargo bench`. Set `VELA_BENCH_SMALL=1` to skip the 100 MiB cases.
+  3 s. Run with `cargo bench`. Set `VIBE_BENCH_SMALL=1` to skip the 100 MiB cases.
 - **Startup**: measured separately by spawning the release binary inside a
   pseudo-terminal with `--smoke` (start, draw one frame, exit) and timing
   wall-clock from `fork` to process exit, 25 runs.
@@ -26,7 +26,7 @@ call: every case goes through the same code path the UI uses.
 | Configuration defaults | 33 ns |
 
 The 7 ms is almost entirely process spawn and dynamic linking: a baseline
-`--version` run costs 6.9 ms on the same machine. Vela's own work before the first
+`--version` run costs 6.9 ms on the same machine. Vibe's own work before the first
 frame is therefore well under 1 ms, and the 100 ms budget is met with two orders
 of magnitude of headroom.
 
@@ -108,7 +108,7 @@ alternative (write in place) can destroy the file if the process dies mid-write.
 
 ```sh
 cargo bench                          # everything (~2 min)
-VELA_BENCH_SMALL=1 cargo bench       # skip the 100 MiB cases
+VIBE_BENCH_SMALL=1 cargo bench       # skip the 100 MiB cases
 cargo bench -- "search/"             # one group
 ```
 

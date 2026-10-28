@@ -60,7 +60,7 @@ resumable matcher would keep the same responsiveness as literal search.
 
 ## Explicitly not planned
 
-- Modal editing (Vim/Emacs key layers). Vela's premise is conventional shortcuts;
+- Modal editing (Vim/Emacs key layers). Vibe's premise is conventional shortcuts;
   a modal mode would double the input surface and dilute the design.
 - A GUI front end. The terminal is the product.
 - Anything that requires an embedded scripting runtime in the editor core: it

@@ -7,9 +7,9 @@ mod common;
 use common::*;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
-use vela::commands::Command;
+use vibe::commands::Command;
 
-fn dump(app: &mut vela::app::App, width: u16, height: u16) {
+fn dump(app: &mut vibe::app::App, width: u16, height: u16) {
     for (i, row) in screen(app, width, height).iter().enumerate() {
         println!("{i:>2}|{row}|");
     }
@@ -17,10 +17,10 @@ fn dump(app: &mut vela::app::App, width: u16, height: u16) {
 
 /// Render one frame and hand back the cell buffer, for assertions that need
 /// colours rather than text.
-fn cells(app: &mut vela::app::App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+fn cells(app: &mut vibe::app::App, width: u16, height: u16) -> ratatui::buffer::Buffer {
     let mut terminal =
         ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, app)).unwrap();
     terminal.backend().buffer().clone()
 }
 
@@ -62,7 +62,7 @@ fn draws_topbar_status_and_text() {
     let rows = screen(&mut app, 80, 24);
     dump(&mut app, 80, 24);
 
-    assert!(rows[0].contains("VELA"), "top bar shows the app name");
+    assert!(rows[0].contains("VIBE"), "top bar shows the app name");
     assert!(rows[0].contains("hello.txt"), "top bar shows the file name");
     let text_row = rows
         .iter()
@@ -197,7 +197,7 @@ fn overlay_find_bar_is_drawn_and_captures_the_screen() {
 fn command_palette_renders_rows() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());
-    app.open_palette(vela::ui::PaletteMode::Commands);
+    app.open_palette(vibe::ui::PaletteMode::Commands);
     let rows = screen(&mut app, 90, 30);
     dump(&mut app, 90, 30);
     assert!(
@@ -223,11 +223,11 @@ fn a_panel_hides_the_text_underneath_it() {
         "the file is on screen before the overlay opens"
     );
 
-    app.open_palette(vela::ui::PaletteMode::Commands);
+    app.open_palette(vibe::ui::PaletteMode::Commands);
     let buf = cells(&mut app, 80, 24);
     dump(&mut app, 80, 24);
 
-    let panel = vela::ui::chrome::centered(ratatui::layout::Rect::new(0, 0, 80, 24), 80, 60);
+    let panel = vibe::ui::chrome::centered(ratatui::layout::Rect::new(0, 0, 80, 24), 80, 60);
     for y in panel.y + 1..panel.y + panel.height - 1 {
         for x in panel.x + 1..panel.x + panel.width - 1 {
             assert_ne!(
@@ -298,7 +298,7 @@ fn resizing_keeps_the_ui_consistent() {
     assert!(small.iter().any(|r| r.contains("alpha")));
     let large = screen(&mut app, 200, 50);
     assert_eq!(large.len(), 50);
-    assert!(large[0].contains("VELA"));
+    assert!(large[0].contains("VIBE"));
 }
 
 #[test]
@@ -310,9 +310,9 @@ fn toggling_the_theme_changes_the_rendered_colours() {
     let mut app = editor(scratch.path());
     type_str(&mut app, "colour");
 
-    let sample = |app: &mut vela::app::App| {
+    let sample = |app: &mut vibe::app::App| {
         let mut terminal = Terminal::new(TestBackend::new(40, 10)).unwrap();
-        terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+        terminal.draw(|f| vibe::ui::draw(f, app)).unwrap();
         let buf = terminal.backend().buffer().clone();
         (0..10)
             .flat_map(|y| (0..40).map(move |x| (x, y)))

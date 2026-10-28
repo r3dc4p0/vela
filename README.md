@@ -1,18 +1,18 @@
-# Vela
+# Vibe
 
 A modern, fast terminal text editor with the keyboard shortcuts you already know.
 
-Vela is a modal-free editor for the terminal: `Ctrl+S` saves, `Ctrl+F` finds,
+Vibe is a modal-free editor for the terminal: `Ctrl+S` saves, `Ctrl+F` finds,
 `Ctrl+Z` undoes, `Ctrl+P` jumps to a file, `Ctrl+Shift+P` opens a command
 palette. It opens instantly, handles large files without stalling, and never
 loses your work.
 
-[Website](https://r3dc4p0.github.io/vela/) · [Architecture](docs/architecture.md) ·
+[Website](https://r3dc4p0.github.io/vibe/) · [Architecture](docs/architecture.md) ·
 [Key bindings](docs/keybindings.md) · [Roadmap](docs/roadmap.md)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ VELA · src/buffer/mod.rs ●                        2 buffers   v0.6.0 │
+│ VIBE · src/buffer/mod.rs ●                        2 buffers   v0.6.0 │
 │ ▏ storage.rs ▏ mod.rs ●                                              │
 │  1 ▏ use std::ops::Range;                                            │
 │  2 ▏                                                                 │
@@ -24,7 +24,7 @@ loses your work.
 │  8 ▏ }                                                               │
 │    ▏ ~                                                               │
 │    ▏ ~                                                               │
-│ ● Rust  LF  UTF-8                                 Ln 4, Col 12   12% │
+│ ● Rust  LF  UTF-8  Spaces: 4                      Ln 4, Col 12   12% │
 │ Ctrl+s save   ·   Ctrl+f find   ·   Ctrl+p open file   ·   F1 help   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -123,11 +123,11 @@ runtime dependencies.
 ## Usage
 
 ```sh
-vela                    # start with an empty buffer
-vela notes.md           # open a file (created on first save if missing)
-vela a.rs b.rs          # open several files
-vela --print-config     # print the effective configuration as TOML
-vela --list-keys        # print every command and its bindings
+vibe                    # start with an empty buffer
+vibe notes.md           # open a file (created on first save if missing)
+vibe a.rs b.rs          # open several files
+vibe --print-config     # print the effective configuration as TOML
+vibe --list-keys        # print every command and its bindings
 ```
 
 | Flag | Meaning |
@@ -171,15 +171,15 @@ The essentials:
 
 > **Terminals are not all the same.** `Ctrl+C` is delivered as `SIGINT` by many
 > terminals before the application sees it, and `Ctrl+Shift+X` / `Ctrl+Tab`
-> cannot be distinguished without the Kitty keyboard protocol. Vela enables the
+> cannot be distinguished without the Kitty keyboard protocol. Vibe enables the
 > protocol when the terminal supports it and falls back to unambiguous
 > alternatives otherwise; the status bar shows `~keys` when the fallback is
 > active. See [docs/keybindings.md](docs/keybindings.md).
 
 ## Configuration
 
-Configuration lives at `$XDG_CONFIG_HOME/vela/config.toml`
-(`~/.config/vela/config.toml`), or `~/Library/Application Support/vela/config.toml`
+Configuration lives at `$XDG_CONFIG_HOME/vibe/config.toml`
+(`~/.config/vibe/config.toml`), or `~/Library/Application Support/vibe/config.toml`
 on macOS. Every key is optional; see [`config.example.toml`](config.example.toml)
 for the full set.
 
@@ -194,7 +194,7 @@ show_whitespace = false
 word_wrap = false
 
 [ui]
-theme = "vela-dark"        # or "vela-light"
+theme = "vibe-dark"        # or "vibe-light"
 style = "pixel"            # or "cell" — block borders instead of hairlines
 show_hints = true
 mouse = true
@@ -223,7 +223,7 @@ Measured on the development machine (Apple silicon, macOS 27, release build,
 
 ## Architecture
 
-Vela separates state, mutation and rendering:
+Vibe separates state, mutation and rendering:
 
 ```
 terminal event → input::translate → Action → App::execute → Document
@@ -250,7 +250,7 @@ for how to add commands, key bindings, UI components and buffer backends.
 
 ## Status and limitations
 
-Vela is a working editor, not a finished product. Known limitations are listed
+Vibe is a working editor, not a finished product. Known limitations are listed
 in [docs/roadmap.md](docs/roadmap.md); the important ones:
 
 - No split views yet.

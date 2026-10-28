@@ -1,4 +1,4 @@
-# Extending Vela
+# Extending Vibe
 
 Everything in the editor is reachable from three seams: the command system, the
 keymap, and the `TextStorage` trait. This guide shows how to use each.
@@ -149,7 +149,7 @@ To add a new panel:
    the overlay is *detached* while you handle a key: take what you need as
    parameters instead of reading `self.ui.overlay`.
 5. Add a hint line in `chrome::draw_hints` so the panel is discoverable.
-6. Add a rendering test in `tests/ui_render.rs` using `vela::ui::render_to_lines`.
+6. Add a rendering test in `tests/ui_render.rs` using `vibe::ui::render_to_lines`.
 
 Colours must come from `Theme`, never from a literal, so both themes keep
 working. Add new colours as fields on `Theme` and set them in `Theme::dark`,

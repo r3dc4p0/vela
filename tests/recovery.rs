@@ -10,11 +10,11 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::*;
-use vela::config::Config;
+use vibe::config::Config;
 
 /// An application that persists into `data`, and recovers from it on the way in.
-fn app_in(dir: &Path, data: &Path) -> vela::app::App {
-    let mut app = vela::app::App::headless(dir.to_path_buf(), Config::default());
+fn app_in(dir: &Path, data: &Path) -> vibe::app::App {
+    let mut app = vibe::app::App::headless(dir.to_path_buf(), Config::default());
     app.persist = true;
     app.data_dir = data.to_path_buf();
     app.recover_unsaved();
@@ -245,7 +245,7 @@ fn the_recovered_state_is_on_disk_immediately() {
     }
 
     let _app = app_in(scratch.path(), &data);
-    let records = vela::recovery::read(&data.join("recovery"));
+    let records = vibe::recovery::read(&data.join("recovery"));
     assert_eq!(records.len(), 1, "the snapshot is still there");
     assert_eq!(records[0].text, "xtext\n", "with the recovered text");
 }

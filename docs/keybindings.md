@@ -4,7 +4,7 @@ Every binding is a *command*. Commands have stable ids (`file.save`,
 `search.findNext`) and can be rebound in `config.toml` or run from the command
 palette (`Ctrl+Shift+P`).
 
-Run `vela --list-keys` to print the table for your current configuration.
+Run `vibe --list-keys` to print the table for your current configuration.
 
 ## Files
 
@@ -165,15 +165,15 @@ fraction of a cell on a border: panels are framed by hairlines on the edge of
 their rows and columns, tabs are split by `▏`, and the line-number gutter is
 ruled off from the text. `cell` is the block-glyph chrome, where a border is a
 whole cell of `│` and `─`. It is a session setting, and can be set in
-configuration with `[ui] style = "cell"` or per run with `vela --ui cell`.
+configuration with `[ui] style = "cell"` or per run with `vibe --ui cell`.
 
 ## Terminal limitations (read this)
 
-Terminals intercept some keys before an application can see them. Vela works
+Terminals intercept some keys before an application can see them. Vibe works
 around this where it can and tells you where it cannot.
 
 1. **`Ctrl+C` sends `SIGINT`.** Many terminals deliver `SIGINT` instead of a key
-   event, so copy would kill the editor. Vela installs a `SIGINT` handler that
+   event, so copy would kill the editor. Vibe installs a `SIGINT` handler that
    restores the terminal and exits cleanly — it does *not* swallow the signal,
    because swallowing it would break `Ctrl+C` in any child process. On terminals
    with the Kitty keyboard protocol (`kitty`, `wezterm`, `ghostty`, recent
@@ -181,12 +181,12 @@ around this where it can and tells you where it cannot.
    not, use `Ctrl+Shift+C`, which is bound to `edit.copy` and never reaches the
    terminal as a signal.
 2. **`Ctrl+Shift+X` is not distinguishable** from `Ctrl+X` on most terminals:
-   the terminal sends the same byte. Vela therefore does not rely on it.
+   the terminal sends the same byte. Vibe therefore does not rely on it.
 3. **`Ctrl+Tab` may be swallowed** by the terminal or the window manager. It is
    bound, but `Ctrl+PageDown`/`Ctrl+PageUp` are not always available either, so
    `Ctrl+Tab` also works from the command palette (`buffer.next`).
 4. **Flow control.** `Ctrl+S` is `XOFF` on terminals with software flow control
-   enabled. Vela puts the terminal in raw mode, which disables it, but a terminal
+   enabled. Vibe puts the terminal in raw mode, which disables it, but a terminal
    multiplexer may still intercept it. If `Ctrl+S` does nothing, run
    `stty -ixon` or use the command palette.
 5. **`Shift+Tab`** is sent as `BackTab` by some terminals and as `Tab`+`Shift` by
@@ -199,7 +199,7 @@ around this where it can and tells you where it cannot.
    `--list-keys` shows both. If neither arrives, `Alt+Click` and `Ctrl+D` are the
    fallbacks, and any chord can be rebound in the configuration.
 
-The status bar shows `~keys` when Vela is running *without* the enhanced keyboard
+The status bar shows `~keys` when Vibe is running *without* the enhanced keyboard
 protocol, so you can tell at a glance which set of caveats applies.
 
 ## Rebinding

@@ -2,18 +2,18 @@
 //!
 //! Run with `cargo bench`. The large-file cases allocate ~100 MiB of text plus
 //! the rope built from it, so give the machine some room; set
-//! `VELA_BENCH_SMALL=1` to run a reduced set (useful in CI).
+//! `VIBE_BENCH_SMALL=1` to run a reduced set (useful in CI).
 
 use std::hint::black_box;
 use std::path::PathBuf;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 
-use vela::app::App;
-use vela::buffer::{Document, Motion, MotionCtx};
-use vela::config::Config;
-use vela::filesystem::{self, Encoding, Eol};
-use vela::search::{find_all, Query};
+use vibe::app::App;
+use vibe::buffer::{Document, Motion, MotionCtx};
+use vibe::config::Config;
+use vibe::filesystem::{self, Encoding, Eol};
+use vibe::search::{find_all, Query};
 
 /// One chunk of realistic-looking prose, ~60 bytes per line.
 fn prose(bytes: usize) -> String {
@@ -31,7 +31,7 @@ fn prose(bytes: usize) -> String {
 }
 
 fn small_mode() -> bool {
-    std::env::var("VELA_BENCH_SMALL").is_ok()
+    std::env::var("VIBE_BENCH_SMALL").is_ok()
 }
 
 fn bench_startup(c: &mut Criterion) {
@@ -63,7 +63,7 @@ fn bench_open(c: &mut Criterion) {
     });
 
     let dir = std::env::temp_dir();
-    let path: PathBuf = dir.join("vela-bench-1mib.txt");
+    let path: PathBuf = dir.join("vibe-bench-1mib.txt");
     std::fs::write(&path, &one_mib).unwrap();
     group.bench_function("load_1mib_from_disk", |b| {
         b.iter(|| black_box(filesystem::load(black_box(&path)).unwrap()));
@@ -78,7 +78,7 @@ fn bench_open(c: &mut Criterion) {
             b.iter(|| black_box(Document::from_text(black_box(&big), None)));
         });
 
-        let big_path = dir.join("vela-bench-100mib.txt");
+        let big_path = dir.join("vibe-bench-100mib.txt");
         std::fs::write(&big_path, &big).unwrap();
         group.bench_function("load_100mib_from_disk", |b| {
             b.iter(|| black_box(filesystem::load(black_box(&big_path)).unwrap()));
@@ -237,7 +237,7 @@ fn bench_render(c: &mut Criterion) {
         let mut terminal = Terminal::new(TestBackend::new(120, rows)).unwrap();
         group.bench_function(label, |b| {
             b.iter(|| {
-                terminal.draw(|f| vela::ui::draw(f, &mut app)).unwrap();
+                terminal.draw(|f| vibe::ui::draw(f, &mut app)).unwrap();
             });
         });
     }
@@ -249,7 +249,7 @@ fn bench_save(c: &mut Criterion) {
     let mut group = c.benchmark_group("save");
     let text = prose(1024 * 1024);
     let dir = std::env::temp_dir();
-    let path = dir.join("vela-bench-save.txt");
+    let path = dir.join("vibe-bench-save.txt");
     group.throughput(Throughput::Bytes(text.len() as u64));
     group.bench_function("atomic_write_1mib", |b| {
         b.iter(|| {

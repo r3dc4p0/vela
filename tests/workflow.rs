@@ -5,7 +5,7 @@ mod common;
 
 use common::*;
 use crossterm::event::{KeyCode, KeyModifiers};
-use vela::commands::Command;
+use vibe::commands::Command;
 
 #[test]
 fn multiple_buffers_can_be_switched() {
@@ -59,7 +59,7 @@ fn opening_a_directory_is_reported_not_crashed() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());
     open(&mut app, scratch.path());
-    assert_eq!(app.last_level(), Some(vela::ui::Level::Error));
+    assert_eq!(app.last_level(), Some(vibe::ui::Level::Error));
     assert_eq!(text(&app), "", "the editor keeps a usable buffer");
 }
 
@@ -299,7 +299,7 @@ fn command_palette_runs_the_selected_command() {
 fn command_palette_filters_and_ignores_unknown_commands() {
     let scratch = Scratch::new();
     let mut app = editor(scratch.path());
-    app.open_palette(vela::ui::PaletteMode::Commands);
+    app.open_palette(vibe::ui::PaletteMode::Commands);
     for ch in "zzzzz".chars() {
         press(&mut app, KeyCode::Char(ch), KeyModifiers::NONE);
     }
@@ -487,7 +487,7 @@ fn a_failed_save_keeps_the_buffer_dirty_and_reports_the_error() {
         modified(&app),
         "a failed save must not clear the dirty flag"
     );
-    assert_eq!(app.last_level(), Some(vela::ui::Level::Error));
+    assert_eq!(app.last_level(), Some(vibe::ui::Level::Error));
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
         "original\n",
@@ -532,5 +532,5 @@ fn quitting_refuses_to_discard_when_saving_fails() {
         "the editor must stay open when it could not save"
     );
     assert_eq!(text(&app), "keep me\n!", "the work is still in the buffer");
-    assert_eq!(app.last_level(), Some(vela::ui::Level::Warn));
+    assert_eq!(app.last_level(), Some(vibe::ui::Level::Warn));
 }

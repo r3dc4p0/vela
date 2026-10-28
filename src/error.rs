@@ -30,7 +30,7 @@ pub enum Error {
     #[error("{path} is not a text file (binary data detected)")]
     Binary { path: PathBuf },
 
-    #[error("{path} uses an unsupported encoding ({encoding}); Vela edits UTF-8 and UTF-16 (BOM) files only")]
+    #[error("{path} uses an unsupported encoding ({encoding}); Vibe edits UTF-8 and UTF-16 (BOM) files only")]
     UnsupportedEncoding { path: PathBuf, encoding: String },
 
     #[error("{0} is a directory")]

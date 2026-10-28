@@ -176,13 +176,13 @@ fn indent_and_dedent_agree_with_the_file() {
 
     // Select the whole file and indent it: every line gains two spaces.
     ctrl(&mut app, 'a');
-    app.execute(vela::commands::Command::Indent);
+    app.execute(vibe::commands::Command::Indent);
     let doc = app.active_doc().expect("a buffer");
     assert_eq!(doc.line_text(0), "  def f():");
 
     // And back off again, by the same amount.
     ctrl(&mut app, 'a');
-    app.execute(vela::commands::Command::Dedent);
+    app.execute(vibe::commands::Command::Dedent);
     let doc = app.active_doc().expect("a buffer");
     assert_eq!(doc.line_text(0), "def f():");
 }

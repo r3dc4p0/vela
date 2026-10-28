@@ -480,7 +480,7 @@ fn draw_help(
 pub fn help_lines(app: &App) -> Vec<String> {
     let mut out = Vec::new();
     out.push(format!(
-        "Vela {} — {} — {} terminal",
+        "Vibe {} — {} — {} terminal",
         crate::VERSION,
         crate::platform::os_name(),
         crate::platform::term_name()

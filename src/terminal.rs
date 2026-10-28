@@ -14,10 +14,10 @@
 //!
 //! crossterm's `supports_keyboard_enhancement()` writes a query and waits up to
 //! **two seconds** for an answer. That would dominate startup time on terminals
-//! that ignore the query, so Vela does not probe by default. Instead `auto` mode
+//! that ignore the query, so Vibe does not probe by default. Instead `auto` mode
 //! consults `$TERM` / `$TERM_PROGRAM` against a list of terminals known to
 //! implement the protocol, and users can force it on or off with
-//! `[terminal] keyboard_enhancement = "on"` or the `VELA_ENHANCED_KEYS`
+//! `[terminal] keyboard_enhancement = "on"` or the `VIBE_ENHANCED_KEYS`
 //! environment variable.
 
 use std::io::{self, Stdout, Write};
@@ -37,9 +37,9 @@ use tracing::{debug, info};
 use crate::config::Enhancement;
 
 /// The concrete backend the application draws into.
-pub type VelaBackend = CrosstermBackend<Stdout>;
+pub type VibeBackend = CrosstermBackend<Stdout>;
 /// The concrete terminal type.
-pub type VelaTerminal = Terminal<VelaBackend>;
+pub type VibeTerminal = Terminal<VibeBackend>;
 
 /// True when the terminal is believed to speak the Kitty keyboard protocol.
 ///
@@ -68,7 +68,7 @@ pub fn terminal_supports_enhancement() -> bool {
 pub fn should_enable_enhancement(mode: Enhancement) -> bool {
     // An explicit environment override always wins, so users can fix a
     // mis-detected terminal without editing a config file.
-    if let Ok(value) = std::env::var("VELA_ENHANCED_KEYS") {
+    if let Ok(value) = std::env::var("VIBE_ENHANCED_KEYS") {
         if let Some(m) = Enhancement::parse(&value) {
             return match m {
                 Enhancement::On => true,
@@ -136,7 +136,7 @@ impl TerminalGuard {
     }
 
     /// Build a ratatui terminal on stdout.
-    pub fn terminal(&self) -> io::Result<VelaTerminal> {
+    pub fn terminal(&self) -> io::Result<VibeTerminal> {
         let backend = CrosstermBackend::new(io::stdout());
         Terminal::new(backend)
     }

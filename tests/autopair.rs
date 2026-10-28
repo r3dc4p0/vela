@@ -10,11 +10,11 @@ mod common;
 
 use common::*;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use vela::commands::Command;
+use vibe::commands::Command;
 
 /// The buffer's text with the caret marked as `|`, which is the only way to
 /// assert on a caret that sits inside a pair.
-fn marked(app: &vela::app::App) -> String {
+fn marked(app: &vibe::app::App) -> String {
     let doc = app.active_doc().expect("a buffer");
     let mut out = doc.text();
     let at = doc.cursor();
@@ -29,7 +29,7 @@ fn marked(app: &vela::app::App) -> String {
     out
 }
 
-fn app_with(scratch: &Scratch, body: &str) -> vela::app::App {
+fn app_with(scratch: &Scratch, body: &str) -> vibe::app::App {
     let mut app = editor(scratch.path());
     type_str(&mut app, body);
     app
@@ -183,7 +183,7 @@ fn a_selection_inside_a_word_is_still_surrounded() {
 // ------------------------------------------------------------ selections
 
 /// The selected text, if any.
-fn selection(app: &vela::app::App) -> Option<String> {
+fn selection(app: &vibe::app::App) -> Option<String> {
     app.active_doc().map(|d| d.selected_text())
 }
 
@@ -367,7 +367,7 @@ fn a_pasted_bracket_is_not_completed() {
 }
 
 /// `Ctrl+Shift+A`, the way a terminal delivers it.
-fn toggle(app: &mut vela::app::App) {
+fn toggle(app: &mut vibe::app::App) {
     press(
         app,
         KeyCode::Char('a'),

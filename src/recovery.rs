@@ -1,7 +1,7 @@
 //! Crash recovery: the unsaved buffers, written where a crash cannot reach them.
 //!
 //! Atomic saves protect the file being written; they do nothing for changes that
-//! were never written. Vela is used to open a file, change it and move on, so a
+//! were never written. Vibe is used to open a file, change it and move on, so a
 //! good deal of work lives in a buffer and nowhere else — and losing it to a
 //! closed terminal or a killed process is the one failure the editor cannot
 //! apologise for.
@@ -25,7 +25,7 @@
 //! One header line, then one record per buffer:
 //!
 //! ```text
-//! vela-recovery 1
+//! vibe-recovery 1
 //! <flags> <line> <col> <mtime> <file_len> <path_len> <text_len>
 //! <path bytes><text bytes>
 //! ```
@@ -45,7 +45,15 @@ use crate::buffer::Document;
 const FILE: &str = "recovery";
 
 /// First line of the file, with the format version.
-const HEADER: &str = "vela-recovery 1";
+const HEADER: &str = "vibe-recovery 1";
+
+/// The header written before the rename.
+///
+/// A snapshot is transient, but the one that exists at the moment of the upgrade
+/// is the only copy of whatever was unsaved, so it is still read. What is
+/// written is always [`HEADER`], so the old spelling drains away on the next
+/// write.
+const LEGACY_HEADER: &str = "vela-recovery 1";
 
 /// The largest buffer copied into a snapshot.
 ///
@@ -166,7 +174,10 @@ pub fn encode(records: &[Record]) -> Vec<u8> {
 /// it impossible to misread one record as another.
 pub fn decode(bytes: &[u8]) -> Vec<Record> {
     let mut out = Vec::new();
-    let Some(rest) = bytes.strip_prefix(HEADER.as_bytes()) else {
+    let Some(rest) = bytes
+        .strip_prefix(HEADER.as_bytes())
+        .or_else(|| bytes.strip_prefix(LEGACY_HEADER.as_bytes()))
+    else {
         return out;
     };
     let Some(mut rest) = rest.strip_prefix(b"\n") else {
@@ -314,10 +325,22 @@ mod tests {
     }
 
     #[test]
+    fn a_snapshot_written_before_the_rename_is_still_read() {
+        // The one that exists at the moment of the upgrade may be the only copy
+        // of somebody's unsaved work, so the old header is read even though
+        // nothing writes it any more.
+        let records = vec![record(Some("/tmp/a"), "unsaved")];
+        let text = String::from_utf8(encode(&records)).unwrap();
+        let old = text.replacen(HEADER, LEGACY_HEADER, 1);
+        assert!(old.starts_with(LEGACY_HEADER));
+        assert_eq!(decode(old.as_bytes()), records);
+    }
+
+    #[test]
     fn a_foreign_file_is_ignored() {
         assert!(decode(b"not a snapshot at all").is_empty());
-        assert!(decode(b"vela-recovery 1\n").is_empty());
-        assert!(decode(b"vela-recovery 1\ngarbage\n").is_empty());
+        assert!(decode(b"vibe-recovery 1\n").is_empty());
+        assert!(decode(b"vibe-recovery 1\ngarbage\n").is_empty());
     }
 
     #[test]
@@ -331,7 +354,7 @@ mod tests {
 
     #[test]
     fn writing_replaces_the_previous_snapshot() {
-        let dir = std::env::temp_dir().join(format!("vela-rec-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("vibe-rec-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         write(&dir, &[record(Some("/tmp/a"), "first")]).unwrap();
         assert_eq!(read(&dir).len(), 1);

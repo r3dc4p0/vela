@@ -1,15 +1,15 @@
-# Vela configuration — every key, with its default.
+# Vibe configuration — every key, with its default.
 #
 # Location:
-#   Linux/BSD   $XDG_CONFIG_HOME/vela/config.toml   (~/.config/vela/config.toml)
-#   macOS       ~/Library/Application Support/vela/config.toml
-#   Windows     %APPDATA%\vela\config.toml
+#   Linux/BSD   $XDG_CONFIG_HOME/vibe/config.toml   (~/.config/vibe/config.toml)
+#   macOS       ~/Library/Application Support/vibe/config.toml
+#   Windows     %APPDATA%\vibe\config.toml
 #
 # Copy this file there and uncomment what you want to change. Every key is
 # optional; an invalid value is clamped or ignored and reported in the
 # notification area at startup, never a reason to fail to start.
 #
-# Check the effective result with:  vela --print-config
+# Check the effective result with:  vibe --print-config
 
 [editor]
 # Columns per tab stop. Values below 1 or above 16 are clamped.
@@ -60,8 +60,8 @@ confirm_unsaved = true
 restore_session = false
 
 [ui]
-# "vela-dark" or "vela-light". Individual colours can be overridden in [colors].
-theme = "vela-dark"
+# "vibe-dark" or "vibe-light". Individual colours can be overridden in [colors].
+theme = "vibe-dark"
 # Show the contextual shortcut hints on the last row.
 show_hints = true
 # Show the buffer tab strip when more than one buffer is open.
@@ -96,7 +96,7 @@ keyboard_enhancement = "auto"
 # Modifiers: ctrl, alt, shift, super. Keys: a character, a named key (enter, esc,
 # tab, space, backspace, delete, insert, home, end, pageup, pagedown, up, down,
 # left, right) or f1–f12. An empty value removes a binding.
-# Run `vela --list-keys` for the ids.
+# Run `vibe --list-keys` for the ids.
 [keys]
 # "ctrl+shift+p" = "help.commandPalette"
 # "f5" = "file.reload"

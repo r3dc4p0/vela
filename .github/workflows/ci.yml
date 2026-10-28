@@ -48,7 +48,7 @@ jobs:
 
       - name: Smoke benchmark
         env:
-          VELA_BENCH_SMALL: "1"
+          VIBE_BENCH_SMALL: "1"
         run: cargo bench --bench core_bench -- --warm-up-time 1 --measurement-time 1
 
       - name: Release build

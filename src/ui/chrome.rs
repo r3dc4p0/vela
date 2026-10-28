@@ -175,7 +175,7 @@ pub fn draw_topbar(buf: &mut Buffer, area: Rect, app: &App) {
     buf.set_string(
         area.x,
         area.y,
-        fit(" VELA ", area.width as usize),
+        fit(" VIBE ", area.width as usize),
         Style::default()
             .bg(theme.topbar_bg)
             .fg(wordmark)

@@ -317,10 +317,10 @@ impl App {
 
     /// Draw exactly one frame and return.
     ///
-    /// Used by `vela --smoke` to verify that the editor can start, negotiate
+    /// Used by `vibe --smoke` to verify that the editor can start, negotiate
     /// the terminal and paint in a real environment (CI, a new terminal
     /// emulator, a packaging check) without needing a human.
-    pub fn run_once(&mut self, terminal: &mut crate::terminal::VelaTerminal) -> crate::Result<()> {
+    pub fn run_once(&mut self, terminal: &mut crate::terminal::VibeTerminal) -> crate::Result<()> {
         terminal
             .draw(|frame| ui::draw(frame, self))
             .map_err(|e| crate::Error::Message(format!("render failed: {e}")))?;
@@ -329,7 +329,7 @@ impl App {
     }
 
     /// Run until the user quits.
-    pub fn run(&mut self, terminal: &mut crate::terminal::VelaTerminal) -> crate::Result<()> {
+    pub fn run(&mut self, terminal: &mut crate::terminal::VibeTerminal) -> crate::Result<()> {
         info!("event loop started");
         while self.running {
             terminal
@@ -1403,9 +1403,9 @@ impl App {
 
     fn toggle_theme(&mut self) {
         self.config.ui.theme = if self.theme.dark {
-            "vela-light".to_string()
+            "vibe-light".to_string()
         } else {
-            "vela-dark".to_string()
+            "vibe-dark".to_string()
         };
         self.theme = if self.theme.dark {
             Theme::light()

@@ -204,7 +204,7 @@ impl App {
                 self.install(path, opened);
                 self.success(format!("Opened {name}"));
             }
-            // `vela notes.md` on a file that does not exist yet: open an empty
+            // `vibe notes.md` on a file that does not exist yet: open an empty
             // buffer bound to that path so the first save creates the file.
             Err(crate::Error::Open { ref source, .. })
                 if source.kind() == std::io::ErrorKind::NotFound =>

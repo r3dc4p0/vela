@@ -9,8 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use vela::app::App;
-use vela::config::Config;
+use vibe::app::App;
+use vibe::config::Config;
 
 /// Build an editor rooted at `dir` that never touches user state.
 pub fn editor(dir: &Path) -> App {
@@ -99,7 +99,7 @@ pub fn modified(app: &App) -> bool {
 
 /// Render the UI headlessly and return the screen as text lines.
 pub fn screen(app: &mut App, width: u16, height: u16) -> Vec<String> {
-    vela::ui::render_to_lines(app, width, height)
+    vibe::ui::render_to_lines(app, width, height)
 }
 
 /// True when any rendered row contains `needle`.

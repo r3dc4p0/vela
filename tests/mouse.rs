@@ -15,18 +15,18 @@ use ratatui::layout::Rect;
 /// Asked of the same function the renderer uses, so a change to the gutter —
 /// a wider column count, a divider column — moves the clicks with it instead of
 /// leaving every test pointing at the wrong cell.
-fn gutter(app: &vela::app::App) -> u16 {
+fn gutter(app: &vibe::app::App) -> u16 {
     let doc = app.active_doc().expect("a buffer");
-    vela::ui::editor::gutter_width(doc.line_count(), &app.config)
+    vibe::ui::editor::gutter_width(doc.line_count(), &app.config)
 }
 
 /// Render a frame and hand back the rects the draw pass published.
-fn frame(app: &mut vela::app::App, width: u16, height: u16) -> (Rect, Rect) {
+fn frame(app: &mut vibe::app::App, width: u16, height: u16) -> (Rect, Rect) {
     let _ = screen(app, width, height);
     (app.editor_area(), app.tabs_area())
 }
 
-fn send(app: &mut vela::app::App, kind: MouseEventKind, column: u16, row: u16) {
+fn send(app: &mut vibe::app::App, kind: MouseEventKind, column: u16, row: u16) {
     app.handle_event(Event::Mouse(MouseEvent {
         kind,
         column,
@@ -36,21 +36,21 @@ fn send(app: &mut vela::app::App, kind: MouseEventKind, column: u16, row: u16) {
 }
 
 /// A press without the release, so a drag can follow.
-fn press(app: &mut vela::app::App, column: u16, row: u16) {
+fn press(app: &mut vibe::app::App, column: u16, row: u16) {
     send(app, MouseEventKind::Down(MouseButton::Left), column, row);
 }
 
 /// A full press-and-release at one cell.
-fn click(app: &mut vela::app::App, column: u16, row: u16) {
+fn click(app: &mut vibe::app::App, column: u16, row: u16) {
     press(app, column, row);
     release(app, column, row);
 }
 
-fn drag(app: &mut vela::app::App, column: u16, row: u16) {
+fn drag(app: &mut vibe::app::App, column: u16, row: u16) {
     send(app, MouseEventKind::Drag(MouseButton::Left), column, row);
 }
 
-fn release(app: &mut vela::app::App, column: u16, row: u16) {
+fn release(app: &mut vibe::app::App, column: u16, row: u16) {
     send(app, MouseEventKind::Up(MouseButton::Left), column, row);
 }
 
@@ -200,7 +200,7 @@ fn clicking_a_tab_switches_buffers() {
 
     let (_, tabs) = frame(&mut app, 80, 24);
     assert!(tabs.height > 0, "tabs are shown for two buffers");
-    let spans = vela::ui::chrome::tab_spans(&app, tabs);
+    let spans = vibe::ui::chrome::tab_spans(&app, tabs);
     assert_eq!(spans.len(), 2);
 
     click(&mut app, spans[0].x + 1, tabs.y);
@@ -220,7 +220,7 @@ fn clicking_a_tab_does_not_move_the_cursor() {
     open(&mut app, &b);
 
     let (_, tabs) = frame(&mut app, 80, 24);
-    let spans = vela::ui::chrome::tab_spans(&app, tabs);
+    let spans = vibe::ui::chrome::tab_spans(&app, tabs);
     let before = app.buffers[1].cursor();
 
     click(&mut app, spans[1].x + 1, tabs.y);

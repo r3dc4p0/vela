@@ -9,24 +9,24 @@ mod common;
 
 use common::*;
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use vela::commands::Command;
+use vibe::commands::Command;
 
 /// Columns taken by the line-number gutter, asked of the same function the
 /// renderer uses: the pixel style draws a rule in it, the block style does not.
-fn gutter(app: &vela::app::App) -> usize {
+fn gutter(app: &vibe::app::App) -> usize {
     let doc = app.active_doc().expect("a buffer");
-    vela::ui::editor::gutter_width(doc.line_count(), &app.config) as usize
+    vibe::ui::editor::gutter_width(doc.line_count(), &app.config) as usize
 }
 
 /// A line long enough to need several rows at the widths used below.
 const LONG: &str = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
 
-fn editor_with_wrap(dir: &std::path::Path, wrap: bool) -> vela::app::App {
+fn editor_with_wrap(dir: &std::path::Path, wrap: bool) -> vibe::app::App {
     editor_with(dir, |c| c.editor.word_wrap = wrap)
 }
 
 /// The rows the editor area was given, gutter included.
-fn editor_rows(app: &mut vela::app::App, width: u16, height: u16) -> Vec<String> {
+fn editor_rows(app: &mut vibe::app::App, width: u16, height: u16) -> Vec<String> {
     let rows = screen(app, width, height);
     let area = app.editor_area();
     (area.y..area.y + area.height)
@@ -35,7 +35,7 @@ fn editor_rows(app: &mut vela::app::App, width: u16, height: u16) -> Vec<String>
 }
 
 /// The editor rows with the gutter removed and trailing blanks trimmed.
-fn body_rows(app: &mut vela::app::App, width: u16, height: u16) -> Vec<String> {
+fn body_rows(app: &mut vibe::app::App, width: u16, height: u16) -> Vec<String> {
     editor_rows(app, width, height)
         .into_iter()
         .map(|row| {
@@ -47,14 +47,14 @@ fn body_rows(app: &mut vela::app::App, width: u16, height: u16) -> Vec<String> {
 
 /// Render one frame and hand back the cell buffer, for assertions that need
 /// colours rather than text.
-fn cells(app: &mut vela::app::App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+fn cells(app: &mut vibe::app::App, width: u16, height: u16) -> ratatui::buffer::Buffer {
     let mut terminal =
         ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, app)).unwrap();
     terminal.backend().buffer().clone()
 }
 
-fn send(app: &mut vela::app::App, kind: MouseEventKind, column: u16, row: u16) {
+fn send(app: &mut vibe::app::App, kind: MouseEventKind, column: u16, row: u16) {
     app.handle_event(Event::Mouse(MouseEvent {
         kind,
         column,
@@ -205,7 +205,7 @@ fn the_view_follows_the_cursor_down_a_wrapped_line() {
 
     // The caret is on screen: its row is between the viewport top and bottom.
     let width = area.width as usize - gutter(&app);
-    let layout = vela::buffer::wrap::LineLayout::new(&doc.line_text(line), width, 4);
+    let layout = vibe::buffer::wrap::LineLayout::new(&doc.line_text(line), width, 4);
     let row = layout.row_of(off);
     assert!(
         row >= doc.scroll_row() && row < doc.scroll_row() + area.height as usize,

@@ -1,23 +1,23 @@
-//! Vela — a modern, fast terminal text editor.
+//! Vibe — a modern, fast terminal text editor.
 //!
 //! This binary is deliberately thin: it parses arguments, sets up logging and
-//! the terminal, then hands control to [`vela::app::App`].
+//! the terminal, then hands control to [`vibe::app::App`].
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use vela::app::App;
-use vela::config::{Config, Enhancement, UiStyle};
-use vela::logging;
-use vela::platform;
-use vela::terminal::TerminalGuard;
+use vibe::app::App;
+use vibe::config::{Config, Enhancement, UiStyle};
+use vibe::logging;
+use vibe::platform;
+use vibe::terminal::TerminalGuard;
 
 const USAGE: &str = "\
-vela — a modern terminal text editor
+vibe — a modern terminal text editor
 
 USAGE:
-    vela [OPTIONS] [FILE...]
+    vibe [OPTIONS] [FILE...]
 
 OPTIONS:
     -h, --help              Print this help and exit
@@ -116,7 +116,7 @@ fn main() -> ExitCode {
     let args = match parse_args() {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("vela: {e}\n\n{USAGE}");
+            eprintln!("vibe: {e}\n\n{USAGE}");
             return ExitCode::from(2);
         }
     };
@@ -127,14 +127,18 @@ fn main() -> ExitCode {
     }
     if args.version {
         println!(
-            "vela {} ({} {}, {})",
-            vela::VERSION,
+            "vibe {} ({} {}, {})",
+            vibe::VERSION,
             platform::os_name(),
             std::env::consts::ARCH,
             platform::term_name()
         );
         return ExitCode::SUCCESS;
     }
+
+    // A rename moves the home directory too, and the recovery snapshot in it
+    // may be the only copy of somebody's unsaved work.
+    platform::adopt_legacy_dirs();
 
     let loaded = Config::load_or_default(args.config.as_deref());
     let mut config = loaded.config;
@@ -149,12 +153,12 @@ fn main() -> ExitCode {
     if args.print_config {
         match config.to_toml() {
             Ok(text) => println!("{text}"),
-            Err(e) => eprintln!("vela: {e}"),
+            Err(e) => eprintln!("vibe: {e}"),
         }
         return ExitCode::SUCCESS;
     }
     if args.list_keys {
-        let mut keymap = vela::keymap::Keymap::defaults();
+        let mut keymap = vibe::keymap::Keymap::defaults();
         keymap.apply_overrides(&config.keys);
         for (chord, cmd) in keymap.all() {
             println!("{:<20} {}", chord.to_config_string(), cmd.id());
@@ -165,7 +169,7 @@ fn main() -> ExitCode {
     let _log = logging::init(&platform::log_dir(), args.verbose, args.no_log);
 
     if !std::io::stdout().is_terminal() {
-        eprintln!("vela: stdout is not a terminal");
+        eprintln!("vibe: stdout is not a terminal");
         return ExitCode::from(1);
     }
 
@@ -175,17 +179,17 @@ fn main() -> ExitCode {
     let mut guard = match TerminalGuard::enter(config.ui.mouse, enhancement) {
         Ok(g) => g,
         Err(e) => {
-            eprintln!("vela: cannot initialise terminal: {e}");
+            eprintln!("vibe: cannot initialise terminal: {e}");
             return ExitCode::from(1);
         }
     };
-    vela::terminal::install_signal_handlers();
+    vibe::terminal::install_signal_handlers();
 
     let mut terminal = match guard.terminal() {
         Ok(t) => t,
         Err(e) => {
             guard.restore();
-            eprintln!("vela: cannot create terminal backend: {e}");
+            eprintln!("vibe: cannot create terminal backend: {e}");
             return ExitCode::from(1);
         }
     };
@@ -208,7 +212,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::from(app.exit_code as u8),
         Err(e) => {
-            eprintln!("vela: {e}");
+            eprintln!("vibe: {e}");
             ExitCode::from(1)
         }
     }

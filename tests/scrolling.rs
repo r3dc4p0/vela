@@ -11,13 +11,13 @@ mod common;
 use common::*;
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
-use vela::app::App;
+use vibe::app::App;
 
 /// Columns taken by the line-number gutter, asked of the same function the
 /// renderer uses — it is wider in the pixel style, which draws a rule in it.
 fn gutter(app: &App) -> usize {
     let doc = app.active_doc().expect("a buffer");
-    vela::ui::editor::gutter_width(doc.line_count(), &app.config) as usize
+    vibe::ui::editor::gutter_width(doc.line_count(), &app.config) as usize
 }
 
 /// One wheel notch. The column and row are irrelevant: the wheel scrolls the
@@ -340,6 +340,6 @@ fn the_sideways_wheel_does_nothing_when_every_line_fits() {
 fn cells(app: &mut App, width: u16, height: u16) -> ratatui::buffer::Buffer {
     let mut terminal =
         ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, app)).unwrap();
     terminal.backend().buffer().clone()
 }

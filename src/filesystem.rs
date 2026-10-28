@@ -344,7 +344,7 @@ pub fn save(
     let bytes = encode(text, eol, encoding, bom);
 
     let tmp_path = dir.join(format!(
-        ".{}.vela-tmp-{}-{}",
+        ".{}.vibe-tmp-{}-{}",
         target
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -560,7 +560,7 @@ mod tests {
         let entries: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
-            .filter(|n| n.contains("vela-tmp"))
+            .filter(|n| n.contains("vibe-tmp"))
             .collect();
         assert!(entries.is_empty(), "temp files left behind: {entries:?}");
     }

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use common::*;
-use vela::app::Loading;
+use vibe::app::Loading;
 
 /// Comfortably over the async threshold, and large enough that opening it is
 /// not instantaneous even on a warm page cache.
@@ -31,7 +31,7 @@ fn big_file(scratch: &Scratch, name: &str) -> PathBuf {
 }
 
 /// Run the event loop's job pump until the open lands.
-fn wait_for_open(app: &mut vela::app::App) {
+fn wait_for_open(app: &mut vibe::app::App) {
     let deadline = Instant::now() + Duration::from_secs(60);
     while app.loading.is_some() {
         assert!(Instant::now() < deadline, "the open never finished");
@@ -71,10 +71,10 @@ fn panel_text(rows: &[String]) -> String {
 /// a surface, which no text dump can see, so this counts cells instead of
 /// looking for characters. Either way the count is never zero while the panel
 /// is up, whichever phase the worker happens to be in.
-fn painted_bar(app: &mut vela::app::App, width: u16, height: u16) -> usize {
+fn painted_bar(app: &mut vibe::app::App, width: u16, height: u16) -> usize {
     let mut terminal =
         ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
-    terminal.draw(|f| vela::ui::draw(f, app)).unwrap();
+    terminal.draw(|f| vibe::ui::draw(f, app)).unwrap();
     let buf = terminal.backend().buffer().clone();
     let track = app.theme.border;
     let mut n = 0;

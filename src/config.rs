@@ -156,7 +156,7 @@ impl UiStyle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiSettings {
-    /// Theme name: `vela-dark` or `vela-light`.
+    /// Theme name: `vibe-dark` or `vibe-light`.
     pub theme: String,
     /// Drawing style: `pixel` (hairlines) or `cell` (block borders).
     pub style: String,
@@ -175,7 +175,7 @@ pub struct UiSettings {
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
-            theme: "vela-dark".to_string(),
+            theme: "vibe-dark".to_string(),
             style: "pixel".to_string(),
             show_hints: true,
             show_tabs: true,
@@ -391,7 +391,7 @@ mod tests {
         let c = Config::default();
         assert_eq!(c.editor.tab_width, 4);
         assert!(c.editor.syntax_highlighting);
-        assert_eq!(c.ui.theme, "vela-dark");
+        assert_eq!(c.ui.theme, "vibe-dark");
         assert!(c.validate().is_empty());
     }
 
@@ -400,7 +400,7 @@ mod tests {
         let (c, _) = Config::from_toml("[editor]\ntab_width = 2\n").unwrap();
         assert_eq!(c.editor.tab_width, 2);
         assert_eq!(c.editor.scroll_off, 3, "unspecified field keeps default");
-        assert_eq!(c.ui.theme, "vela-dark");
+        assert_eq!(c.ui.theme, "vibe-dark");
     }
 
     #[test]

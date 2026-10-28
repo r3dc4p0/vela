@@ -1,4 +1,4 @@
-# Contributing to Vela
+# Contributing to Vibe
 
 Thanks for taking the time to contribute. This document is short on purpose.
 
@@ -29,13 +29,13 @@ Thanks for taking the time to contribute. This document is short on purpose.
 ## Workflow
 
 ```sh
-git clone <repo> && cd vela
+git clone <repo> && cd vibe
 cargo build
 cargo run -- examples/hello.txt
 ```
 
 The debug build is fast enough to develop against. Use `cargo run -- -v` to get
-a debug-level log at `$XDG_STATE_HOME/vela/logs/` (`--no-log` to skip logging
+a debug-level log at `$XDG_STATE_HOME/vibe/logs/` (`--no-log` to skip logging
 entirely).
 
 ## What to work on
