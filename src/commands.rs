@@ -405,8 +405,12 @@ impl Command {
             Command::MoveLineUp => &["alt+up"],
             Command::MoveLineDown => &["alt+down"],
             Command::ToggleComment => &["ctrl+/"],
-            Command::AddCursorAbove => &["ctrl+alt+up"],
-            Command::AddCursorBelow => &["ctrl+alt+down"],
+            // `ctrl+shift` is the binding most terminals deliver reliably:
+            // `ctrl+alt` is swallowed by some of them, and on macOS `alt` is
+            // often the compose key. Both are kept, because neither costs
+            // anything and the older one is already in people's fingers.
+            Command::AddCursorAbove => &["ctrl+shift+up", "ctrl+alt+up"],
+            Command::AddCursorBelow => &["ctrl+shift+down", "ctrl+alt+down"],
             Command::AddCursorToNextOccurrence => &["ctrl+d"],
             Command::SplitPane => &["ctrl+\\"],
             Command::ClosePane => &["ctrl+alt+w"],

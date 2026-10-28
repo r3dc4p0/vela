@@ -8,15 +8,27 @@
 mod common;
 
 use common::*;
-use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;
 use ratatui::Terminal;
 
 const CTRL_ALT: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::ALT);
+const CTRL_SHIFT: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::SHIFT);
 
 fn ctrl_alt(app: &mut vela::app::App, code: KeyCode) {
     press(app, code, CTRL_ALT);
+}
+
+fn ctrl_shift(app: &mut vela::app::App, code: KeyCode) {
+    press(app, code, CTRL_SHIFT);
+}
+
+/// One key event of an arbitrary kind, the way a held key arrives.
+fn key_of(code: KeyCode, mods: KeyModifiers, kind: KeyEventKind) -> Event {
+    Event::Key(KeyEvent::new_with_kind(code, mods, kind))
 }
 
 fn caret_positions(app: &vela::app::App) -> Vec<usize> {
@@ -63,6 +75,91 @@ fn typing_reaches_every_cursor() {
     type_str(&mut app, ">");
     assert_eq!(text(&app), ">aaa\n>bbb\n>ccc");
     assert_eq!(caret_positions(&app), vec![1, 6, 11]);
+}
+
+#[test]
+fn ctrl_shift_down_stacks_cursors() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "aaa\nbbb\nccc\nddd");
+    ctrl(&mut app, KeyCode::Home);
+    ctrl_shift(&mut app, KeyCode::Down);
+    ctrl_shift(&mut app, KeyCode::Down);
+
+    assert_eq!(caret_count(&app), 3);
+    assert_eq!(caret_positions(&app), vec![0, 4, 8]);
+
+    type_str(&mut app, ">");
+    assert_eq!(text(&app), ">aaa\n>bbb\n>ccc\nddd");
+}
+
+#[test]
+fn ctrl_shift_up_stacks_cursors_above() {
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "aaa\nbbb\nccc");
+    ctrl(&mut app, KeyCode::End);
+    plain(&mut app, KeyCode::Home);
+    assert_eq!(caret_positions(&app), vec![8], "the last line, column 0");
+
+    ctrl_shift(&mut app, KeyCode::Up);
+    ctrl_shift(&mut app, KeyCode::Up);
+    assert_eq!(caret_count(&app), 3);
+    assert_eq!(caret_positions(&app), vec![0, 4, 8]);
+}
+
+#[test]
+fn holding_the_key_keeps_adding_cursors() {
+    // A held key arrives as one press and then a stream of repeats. Every
+    // repeat has to add a cursor, which is the whole point of holding it.
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "a\nb\nc\nd\ne");
+    ctrl(&mut app, KeyCode::Home);
+    ctrl_shift(&mut app, KeyCode::Down);
+
+    for _ in 0..3 {
+        app.handle_event(key_of(KeyCode::Down, CTRL_SHIFT, KeyEventKind::Repeat));
+    }
+    assert_eq!(caret_count(&app), 5, "four presses, five cursors");
+    assert_eq!(caret_positions(&app), vec![0, 2, 4, 6, 8]);
+}
+
+#[test]
+fn releasing_the_key_adds_nothing() {
+    // The other half of holding it: the release that ends the hold must not be
+    // counted as another press, or every hold would end one cursor too deep.
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "a\nb\nc");
+    ctrl(&mut app, KeyCode::Home);
+    ctrl_shift(&mut app, KeyCode::Down);
+    assert_eq!(caret_count(&app), 2);
+
+    app.handle_event(key_of(KeyCode::Down, CTRL_SHIFT, KeyEventKind::Release));
+    assert_eq!(caret_count(&app), 2);
+}
+
+#[test]
+fn the_old_binding_still_works() {
+    // `ctrl+alt` was the original chord and is still in people's fingers.
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+
+    type_str(&mut app, "aaa\nbbb\nccc");
+    ctrl(&mut app, KeyCode::Home);
+    ctrl_alt(&mut app, KeyCode::Down);
+    ctrl_shift(&mut app, KeyCode::Down);
+
+    assert_eq!(
+        caret_positions(&app),
+        vec![0, 4, 8],
+        "either chord adds a cursor"
+    );
 }
 
 #[test]

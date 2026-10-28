@@ -30,7 +30,8 @@ Run `vela --list-keys` to print the table for your current configuration.
 | `Ctrl+Shift+C` | `edit.copy` | Copy, for terminals that turn `Ctrl+C` into `SIGINT` |
 | `Ctrl+A` | `edit.selectAll` | Select the whole document |
 | `Ctrl+D` | `edit.addCursorToNext` | Add a cursor at the next occurrence of the selection (the first press selects the word under the cursor); matching is literal, so `he` also matches inside `hello` |
-| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | `edit.addCursorAbove` / `edit.addCursorBelow` | Add a cursor on the line above / below, keeping the column |
+| `Ctrl+Shift+Up` / `Ctrl+Shift+Down` | `edit.addCursorAbove` / `edit.addCursorBelow` | Add a cursor on the line above / below, keeping the column. Hold the key to keep stacking — one cursor per key repeat |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | `edit.addCursorAbove` / `edit.addCursorBelow` | The same two commands, for fingers that learned this chord first |
 | `Alt+Click` | — | Add a cursor, or remove the one already there |
 | `Esc` | — | Collapse every cursor back to one |
 | `Ctrl+/` | `edit.toggleComment` | Toggle line comments for the file's language |
@@ -190,11 +191,13 @@ around this where it can and tells you where it cannot.
    `stty -ixon` or use the command palette.
 5. **`Shift+Tab`** is sent as `BackTab` by some terminals and as `Tab`+`Shift` by
    others; both are handled.
-6. **`Ctrl+Alt+Up`/`Ctrl+Alt+Down`** need a terminal that reports the Alt
-   modifier with arrow keys. Without the enhanced protocol some terminals send a
-   plain arrow, which moves the cursor instead of adding one; `Alt+Click` and
-   `Ctrl+D` are the fallbacks. Rebind them with `"ctrl+alt+up"` if you prefer a
-   different chord.
+6. **`Ctrl+Shift+Up`/`Ctrl+Shift+Down`** add a cursor above or below, and holding
+   the key keeps adding — one cursor per key repeat. **`Ctrl+Alt+Up`/`Ctrl+Alt+Down`**
+   do the same, but need a terminal that reports the Alt modifier with arrow
+   keys: without the enhanced protocol some terminals send a plain arrow, which
+   moves the cursor instead of adding one — which is why `Ctrl+Shift` exists.
+   `--list-keys` shows both. If neither arrives, `Alt+Click` and `Ctrl+D` are the
+   fallbacks, and any chord can be rebound in the configuration.
 
 The status bar shows `~keys` when Vela is running *without* the enhanced keyboard
 protocol, so you can tell at a glance which set of caveats applies.

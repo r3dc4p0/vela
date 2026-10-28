@@ -54,7 +54,9 @@ bracket surrounds it rather than replacing it, and leaves it selected so a
 second bracket wraps it again. One setting, `auto_pairs`, or `Ctrl+Shift+A` to
 toggle it for the session.
 
-**Multi-cursor** — stack carets with `Ctrl+Alt+Up`/`Ctrl+Alt+Down`, add one per
+**Multi-cursor** — stack carets with `Ctrl+Shift+Up`/`Ctrl+Shift+Down`, and keep
+holding to keep stacking; `Ctrl+Alt+Up`/`Ctrl+Alt+Down` does the same for fingers
+that learned it first. Add one per
 occurrence of the selection with `Ctrl+D`, or place them with `Alt+Click`.
 Typing, deleting, indenting and newlines apply to every caret as a single undo
 step, and `Esc` collapses back to one. Occurrences are matched literally, so a
@@ -159,7 +161,8 @@ The essentials:
 | `Ctrl+X` / `Ctrl+C` / `Ctrl+V` | Cut / Copy / Paste |
 | `Ctrl+A` | Select all |
 | `Ctrl+D` | Add a cursor at the next occurrence |
-| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Add a cursor above / below |
+| `Ctrl+Shift+Up` / `Ctrl+Shift+Down` | Add a cursor above / below (hold to stack) |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | The same, if your terminal reports Alt with arrows |
 | `Alt+Click` | Add or remove a cursor |
 | `Ctrl+G` | Go to line |
 | `Ctrl+Tab` | Next buffer |
