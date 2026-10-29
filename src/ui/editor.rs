@@ -134,6 +134,13 @@ struct PaintCtx<'a> {
     /// rules are spaced by. A two-space file has its rules two columns apart
     /// even when the display tab width is four.
     indent_width: usize,
+    /// Glyph for a guide rule.
+    ///
+    /// The pixel style uses the right eighth block, which puts the rule on the
+    /// right *edge* of the last indentation cell — flush with the text it
+    /// introduces. `│` is centred in its cell, so it floats half a cell short
+    /// of the boundary and reads as a mark in the middle of the indentation.
+    guide_glyph: &'static str,
     show_ws: bool,
     show_guides: bool,
     cursor: usize,
@@ -636,6 +643,10 @@ impl EditorRenderer<'_> {
             brackets: self.brackets,
             tab_width,
             indent_width,
+            guide_glyph: match self.cfg.ui_style() {
+                crate::config::UiStyle::Pixel => "▕",
+                crate::config::UiStyle::Cell => "│",
+            },
             show_ws: self.cfg.editor.show_whitespace,
             show_guides: self.cfg.editor.show_indent_guides,
             cursor: self.doc.cursor(),
@@ -818,7 +829,7 @@ fn draw_indent_guides(buf: &mut Buffer, ctx: &PaintCtx<'_>, y: u16, leading: usi
             if gx < area.x + area.width {
                 let cell = &mut buf[(gx, y)];
                 if cell.symbol() == " " {
-                    cell.set_symbol("│")
+                    cell.set_symbol(ctx.guide_glyph)
                         .set_style(Style::default().fg(ctx.theme.indent_guide));
                 }
             }

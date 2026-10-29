@@ -24,7 +24,7 @@ fn guides(app: &mut vibe::app::App, row: usize) -> Vec<usize> {
     rows[area.y as usize + row]
         .chars()
         .enumerate()
-        .filter(|(i, c)| *i >= text_x && *c == '│')
+        .filter(|(i, c)| *i >= text_x && (*c == '▕' || *c == '│'))
         .map(|(i, _)| i - text_x)
         .collect()
 }
@@ -162,6 +162,30 @@ fn rgb(color: ratatui::style::Color) -> Option<(u8, u8, u8)> {
 }
 
 #[test]
+fn the_rule_uses_the_glyph_of_the_drawing_style() {
+    // The pixel style puts the rule on the right edge of the last indentation
+    // cell, flush with the text; the block style uses the whole-cell `│`.
+    let scratch = Scratch::new();
+    let path = scratch.file("block.rs", "fn f() {\n    x\n}\n");
+
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    let rows = screen(&mut app, 80, 24);
+    let area = app.editor_area();
+    assert!(rows[area.y as usize + 1].contains('▕'), "pixel style");
+
+    let mut app = editor_with(scratch.path(), |c| c.ui.style = "cell".to_string());
+    open(&mut app, &path);
+    let rows = screen(&mut app, 80, 24);
+    let area = app.editor_area();
+    let doc = app.active_doc().expect("a buffer");
+    let gutter = vibe::ui::editor::gutter_width(doc.line_count(), &app.config) as usize;
+    let body: String = rows[area.y as usize + 1].chars().skip(gutter).collect();
+    assert!(body.contains('│'), "block style: {body:?}");
+    assert!(!body.contains('▕'), "and not the pixel glyph");
+}
+
+#[test]
 fn a_flat_file_gets_no_rules() {
     let scratch = Scratch::new();
     let path = scratch.file("flat.txt", "one\ntwo\nthree\n");
@@ -194,7 +218,7 @@ fn a_rule_never_overwrites_a_character() {
 
     assert_eq!(
         text.trim_end(),
-        "   │x",
+        "   ▕x",
         "the rule sits just before the text"
     );
 }
