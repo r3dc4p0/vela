@@ -98,6 +98,7 @@ pub enum Command {
     ToggleLineNumbers,
     ToggleRelativeNumbers,
     ToggleWhitespace,
+    ToggleIndentGuides,
     ToggleSyntax,
     ToggleHints,
     ToggleCursorLine,
@@ -163,6 +164,7 @@ impl Command {
         Command::ToggleLineNumbers,
         Command::ToggleRelativeNumbers,
         Command::ToggleWhitespace,
+        Command::ToggleIndentGuides,
         Command::ToggleSyntax,
         Command::ToggleHints,
         Command::ToggleCursorLine,
@@ -226,6 +228,7 @@ impl Command {
             Command::ToggleLineNumbers => "view.toggleLineNumbers",
             Command::ToggleRelativeNumbers => "view.toggleRelativeNumbers",
             Command::ToggleWhitespace => "view.toggleWhitespace",
+            Command::ToggleIndentGuides => "view.toggleIndentGuides",
             Command::ToggleSyntax => "view.toggleSyntax",
             Command::ToggleHints => "view.toggleHints",
             Command::ToggleCursorLine => "view.toggleCursorLine",
@@ -290,6 +293,7 @@ impl Command {
             Command::ToggleLineNumbers => "Toggle Line Numbers",
             Command::ToggleRelativeNumbers => "Toggle Relative Line Numbers",
             Command::ToggleWhitespace => "Toggle Visible Whitespace",
+            Command::ToggleIndentGuides => "Toggle Indent Guides",
             Command::ToggleSyntax => "Toggle Syntax Highlighting",
             Command::ToggleHints => "Toggle Shortcut Hints",
             Command::ToggleCursorLine => "Toggle Cursor Line Highlight",
@@ -356,6 +360,7 @@ impl Command {
             | Command::ToggleLineNumbers
             | Command::ToggleRelativeNumbers
             | Command::ToggleWhitespace
+            | Command::ToggleIndentGuides
             | Command::ToggleSyntax
             | Command::ToggleHints
             | Command::ToggleCursorLine
@@ -420,6 +425,7 @@ impl Command {
             Command::ToggleUiStyle => &["ctrl+shift+u"],
             Command::ToggleAutoPairs => &["ctrl+shift+a"],
             Command::ToggleWhitespace => &["alt+z"],
+            Command::ToggleIndentGuides => &["ctrl+shift+g"],
             Command::ToggleWordWrap => &["alt+w"],
             Command::GotoBufferStart => &["ctrl+home"],
             Command::GotoBufferEnd => &["ctrl+end"],
@@ -454,6 +460,7 @@ impl Command {
                 | Command::ToggleRelativeNumbers
                 | Command::ToggleSyntax
                 | Command::ToggleWhitespace
+                | Command::ToggleIndentGuides
                 | Command::ToggleCursorLine
                 | Command::ToggleWordWrap
                 | Command::ShowStats
@@ -480,7 +487,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 58);
+        assert_eq!(Command::ALL.len(), 59);
     }
 
     #[test]

@@ -1174,6 +1174,13 @@ impl App {
                     on_off(self.config.editor.syntax_highlighting)
                 ));
             }
+            Command::ToggleIndentGuides => {
+                self.config.editor.show_indent_guides = !self.config.editor.show_indent_guides;
+                self.info(format!(
+                    "Indent guides {}",
+                    on_off(self.config.editor.show_indent_guides)
+                ));
+            }
             Command::ToggleAutoPairs => {
                 self.config.editor.auto_pairs = !self.config.editor.auto_pairs;
                 self.info(format!(

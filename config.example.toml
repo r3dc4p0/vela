@@ -41,7 +41,11 @@ relative_numbers = false
 line_numbers = true
 # Render tabs as →, spaces as · and control characters as ^X.
 show_whitespace = false
-# Draw faint vertical guides at the indentation stops.
+# Draw a faint vertical rule at the start of every indentation block, running
+# from its first line to its last, so a function or an if/else can be followed
+# to where it ends. Blank lines inside a block keep the rule. Ctrl+Shift+G
+# toggles it for the session. The rules are spaced by the file's own indent
+# width, so a two-space file gets them two columns apart.
 show_indent_guides = true
 # Tint the row the cursor is on.
 highlight_cursor_line = true

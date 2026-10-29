@@ -44,6 +44,12 @@ The status bar says which style is in force; `use_spaces` and `tab_width`
 describe new buffers and files whose text says nothing. Turn it off with
 `detect_indent = false`.
 
+**Indent guides** — a faint rule marks the start of every indentation block and
+runs to its last line, so a function or an if/else can be followed to where it
+ends. Blank lines inside a block keep the rule; the line that closes the block
+does not, which is what makes the end visible. The rules are spaced by the
+file's own indent width, and `Ctrl+Shift+G` turns them off.
+
 **Typing** — brackets and quotes complete themselves: `(` writes `()` with the
 caret between them, a closer already under the caret is stepped over instead of
 doubled, backspace inside an empty pair removes both halves, and Enter between

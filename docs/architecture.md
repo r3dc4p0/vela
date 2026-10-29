@@ -264,6 +264,28 @@ rather than a row: `▏` between tabs and in front of the line numbers. That is
 why the pixel style's gutter is two columns wider than the block style's, and
 the only place the two styles lay out differently.
 
+### Indent guides mark a block, not a column of dots
+
+A guide is drawn in the *last* column of its level's indentation — column 3 for
+a body indented by four — which is the only column that is still whitespace on
+the lines belonging to that level. That is what turns the rules into a block
+boundary: they start on the first line of the body, run down every line of it,
+and stop at the line that closes it, because that line is outdented and has no
+rule at that level. Drawing them at the *first* column of the next level, as
+this used to, leaves a one-level block with no rule at all — a function body
+looked like plain text.
+
+Two details make it read correctly. A blank line has no indentation of its own,
+so it inherits the previous line's rules; without that, every blank line cuts
+the block in half. And the rules are spaced by the *file's* indent width
+(`Document::indent_style`), not the configured tab width, so a two-space file
+gets them two columns apart.
+
+The order matters too: the rules are painted **after** the text, and only into
+cells that still hold a space. Painted before, the line painter's own leading
+spaces erase every rule it just drew — which is why the feature looked like it
+did nothing.
+
 ### Mouse hit-testing reads the last frame
 
 Mouse events arrive as screen coordinates, but the mapping from a cell to a
@@ -549,6 +571,7 @@ would dominate the startup budget.
 | Loading | `tests/loading.rs`: the panel while a big file opens, its absence for a small one, a bar that tracks bytes, the spinner advancing between frames, and a second open superseding the first |
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
+| Indent guides | `tests/indent_guides.rs`: the rule runs from a block's first line to its last and stops at the closing brace, a blank line inside keeps it and a blank line after does not, a nested block gets its own, the spacing follows the file's indent width, the toggle and its key work, a flat file has none, and a rule never lands on a character |
 | Features | `tests/features.rs`: reload (and the confirmation that guards it), recents, session restore, binary refusal, a key override, quick open, trim, regex backreferences, whole-word, UTF-16 and CR round trips, the display toggles, a colour override and the document statistics |
 | Indentation | `tests/indent.rs`: a two-space file indents by two and a tab file by a tab, the file beats the settings, a new buffer uses them, `detect_indent = false` turns it off, a file with no indentation falls back, the status bar names the style, Enter and the pair expansion use the file's width, dedent removes one of its levels, and two buffers in one session keep their own styles |
 | Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded and stays selected (so it can be surrounded again), backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, `Ctrl+Shift+A` turns the rules off and on, and each of these holds at every caret |

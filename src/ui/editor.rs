@@ -130,6 +130,10 @@ struct PaintCtx<'a> {
     current_match: Option<usize>,
     brackets: Option<(usize, usize)>,
     tab_width: usize,
+    /// Columns in one indentation level of *this file*, which is what the guide
+    /// rules are spaced by. A two-space file has its rules two columns apart
+    /// even when the display tab width is four.
+    indent_width: usize,
     show_ws: bool,
     show_guides: bool,
     cursor: usize,
@@ -459,6 +463,21 @@ impl EditorRenderer<'_> {
         self.doc.set_viewport_rows(rows);
 
         let tab_width = self.cfg.tab_width();
+        // Guides follow the file's own indentation, like Tab and Enter do. A
+        // tab-indented file is one column of indentation per level, drawn as
+        // wide as a tab.
+        let indent_width = self
+            .doc
+            .indent_style()
+            .map(|style| {
+                if style.use_spaces {
+                    style.width
+                } else {
+                    tab_width
+                }
+            })
+            .unwrap_or(tab_width)
+            .max(1);
         let line_count = self.doc.line_count();
         let (cur_line, cur_off) = self.doc.cursor_line_col();
 
@@ -616,6 +635,7 @@ impl EditorRenderer<'_> {
             current_match: self.search.matches.current,
             brackets: self.brackets,
             tab_width,
+            indent_width,
             show_ws: self.cfg.editor.show_whitespace,
             show_guides: self.cfg.editor.show_indent_guides,
             cursor: self.doc.cursor(),
@@ -637,6 +657,10 @@ impl EditorRenderer<'_> {
         // and paint a continuation row of a string or comment as code.
         let mut line_tokens: Vec<Token> = Vec::new();
         let mut lexed_line: Option<usize> = None;
+
+        // Indentation of the last line that had any, for the blank lines that
+        // follow it.
+        let mut prev_indent = 0usize;
 
         for row in 0..rows {
             let y = area.y + row as u16;
@@ -712,10 +736,6 @@ impl EditorRenderer<'_> {
             };
             let chars: Vec<char> = window.text.chars().collect();
 
-            if ctx.show_guides {
-                draw_indent_guides(buf, &ctx, y, &window, line_start, area);
-            }
-
             scratch_tokens.clear();
             if syntax_on {
                 let state = self
@@ -754,6 +774,22 @@ impl EditorRenderer<'_> {
                     cursor_pos = Some(pos);
                 }
             }
+
+            if ctx.show_guides && first_row_of_line {
+                // A blank line has no indentation of its own, and the block it
+                // sits in would be cut in half by that; it inherits the rules
+                // of the line above, which is where the block came from.
+                let blank = window.text.trim().is_empty();
+                let leading = if blank {
+                    prev_indent
+                } else {
+                    line_indent(self.doc, line, tab_width)
+                };
+                if !blank {
+                    prev_indent = leading;
+                }
+                draw_indent_guides(buf, &ctx, y, leading, area);
+            }
         }
 
         if let (Some(pos), true) = (cursor_pos, self.focused) {
@@ -762,25 +798,23 @@ impl EditorRenderer<'_> {
     }
 }
 
-/// Indent guides are drawn before text so glyphs win on occupied cells.
-fn draw_indent_guides(
-    buf: &mut Buffer,
-    ctx: &PaintCtx<'_>,
-    y: u16,
-    window: &Window,
-    _line_start: usize,
-    area: Rect,
-) {
-    let leading: usize = window
-        .text
-        .chars()
-        .take_while(|c| *c == ' ' || *c == '\t')
-        .map(|c| if c == '\t' { ctx.tab_width } else { 1 })
-        .sum();
-    let mut guide = ctx.tab_width;
-    while guide < leading {
-        if guide >= ctx.left {
-            let gx = ctx.text_x + (guide - ctx.left) as u16;
+/// Draw the rule for every enclosing indentation level.
+///
+/// Painted *after* the text, and it only ever writes into a cell that still
+/// holds a space, so a real character always wins. Before the text was the
+/// wrong order: the painter writes the line's leading spaces too, which erased
+/// every rule it had just drawn.
+fn draw_indent_guides(buf: &mut Buffer, ctx: &PaintCtx<'_>, y: u16, leading: usize, area: Rect) {
+    // One rule per level, in the *last* column of that level's indentation.
+    // That is what turns a set of guides into a block boundary: the rule for a
+    // body indented by four sits in column 3, immediately before its text, so it
+    // runs from the first line of the body to the last. A line indented by zero
+    // — the `fn` header, the closing brace — gets no rule at all, which is how
+    // the block is seen to end.
+    let mut col = ctx.indent_width.saturating_sub(1);
+    while col < leading {
+        if col >= ctx.left {
+            let gx = ctx.text_x + (col - ctx.left) as u16;
             if gx < area.x + area.width {
                 let cell = &mut buf[(gx, y)];
                 if cell.symbol() == " " {
@@ -789,8 +823,18 @@ fn draw_indent_guides(
                 }
             }
         }
-        guide += ctx.tab_width;
+        col += ctx.indent_width;
     }
+}
+
+/// Display columns of a line's leading whitespace.
+fn line_indent(doc: &Document, line: usize, tab_width: usize) -> usize {
+    doc.storage()
+        .line_slice(line)
+        .chars()
+        .take_while(|c| *c == ' ' || *c == '\t')
+        .map(|c| if c == '\t' { tab_width } else { 1 })
+        .sum()
 }
 
 /// Columns the line-number gutter occupies.
@@ -882,7 +926,10 @@ mod tests {
     #[test]
     fn renders_tabs_as_spaces() {
         let mut doc = Document::from_text("\tx", None);
-        let cfg = Config::default();
+        // Guides off: this measures the tab's width, and a guide in the last
+        // column of the indentation is a different question.
+        let mut cfg = Config::default();
+        cfg.editor.show_indent_guides = false;
         let out = render_to_string(&mut doc, &cfg, 20, 2);
         assert!(out.contains("    x"), "{out}");
     }

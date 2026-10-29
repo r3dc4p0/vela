@@ -126,6 +126,7 @@ horizontally once the longest line ends.
 | `Ctrl+Shift+P` | `help.commandPalette` | Command palette |
 | `Ctrl+Shift+T` | `view.toggleTheme` | Dark / light |
 | `Ctrl+Shift+U` | `view.toggleUiStyle` | Hairline chrome / block chrome |
+| `Ctrl+Shift+G` | `view.toggleIndentGuides` | Rule between indentation blocks on / off |
 | `Alt+Z` | `view.toggleWhitespace` | Show tabs, spaces and control characters |
 | `Alt+W` | `view.toggleWordWrap` | Wrap long lines at the window width |
 
