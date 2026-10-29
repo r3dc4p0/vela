@@ -698,9 +698,16 @@ impl App {
             if !path.exists() {
                 continue;
             }
-            let before = self.buffers.len();
-            self.open_path(path);
-            if self.buffers.len() > before {
+            self.open_path(path.clone());
+            // `adopt` may replace the pristine blank buffer rather than append,
+            // so "did the list grow" is the wrong test: it is false for the very
+            // first file of a session, which is the common case. What counts is
+            // whether the path is now open.
+            let opened = self
+                .buffers
+                .iter()
+                .any(|b| b.path().map(|p| same_file(p, &path)).unwrap_or(false));
+            if opened {
                 if let Ok(l) = l.parse::<usize>() {
                     let col = c.parse::<usize>().unwrap_or(0);
                     if let Some(doc) = self.active_doc_mut() {
