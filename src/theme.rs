@@ -218,7 +218,7 @@ impl Theme {
             success: Color::Rgb(0x8f, 0xbc, 0x8f),
 
             bracket_match: Color::Rgb(0xc8, 0xa0, 0x5a),
-            indent_guide: Color::Rgb(0x26, 0x2c, 0x38),
+            indent_guide: Color::Rgb(0x3a, 0x44, 0x52),
 
             syntax: SyntaxColors {
                 keyword: Color::Rgb(0xc6, 0x8f, 0xd8),
@@ -292,7 +292,7 @@ impl Theme {
             success: Color::Rgb(0x2f, 0x7a, 0x4f),
 
             bracket_match: Color::Rgb(0x9a, 0x6b, 0x1e),
-            indent_guide: Color::Rgb(0xe4, 0xe4, 0xde),
+            indent_guide: Color::Rgb(0xd0, 0xd0, 0xc6),
 
             syntax: SyntaxColors {
                 keyword: Color::Rgb(0x8a, 0x3f, 0xb0),

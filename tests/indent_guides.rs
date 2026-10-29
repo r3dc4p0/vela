@@ -135,6 +135,33 @@ fn the_toggle_turns_the_rules_off_and_on() {
 }
 
 #[test]
+fn the_rule_is_visible_against_the_background() {
+    // A rule the colour of the background is not a feature, and that is exactly
+    // how this one shipped once. The ratio is a matter of taste; being able to
+    // see it is not.
+    for theme in [vibe::theme::Theme::dark(), vibe::theme::Theme::light()] {
+        let (Some(bg), Some(guide)) = (rgb(theme.bg), rgb(theme.indent_guide)) else {
+            panic!("the colours are literal");
+        };
+        let distance = (bg.0 as i32 - guide.0 as i32).abs()
+            + (bg.1 as i32 - guide.1 as i32).abs()
+            + (bg.2 as i32 - guide.2 as i32).abs();
+        assert!(
+            distance >= 90,
+            "{}: the guide is {distance} from the background",
+            theme.name
+        );
+    }
+}
+
+fn rgb(color: ratatui::style::Color) -> Option<(u8, u8, u8)> {
+    match color {
+        ratatui::style::Color::Rgb(r, g, b) => Some((r, g, b)),
+        _ => None,
+    }
+}
+
+#[test]
 fn a_flat_file_gets_no_rules() {
     let scratch = Scratch::new();
     let path = scratch.file("flat.txt", "one\ntwo\nthree\n");
