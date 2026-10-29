@@ -49,6 +49,20 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Option<(u16, u16)> {
             let r = draw_prompt(buf, area, &theme, " Go to line: ", &value, cursor, "");
             (r, Overlay::GotoLine(input))
         }
+        Overlay::Indent(input) => {
+            let value = input.value().to_string();
+            let cursor = input.cursor();
+            let r = draw_prompt(
+                buf,
+                area,
+                &theme,
+                " Indentation: ",
+                &value,
+                cursor,
+                " 2/4/8/tab ",
+            );
+            (r, Overlay::Indent(input))
+        }
         Overlay::Open(mut p) => {
             let r = draw_path_prompt(buf, area, &theme, deco, " Open file: ", &mut p);
             (r, Overlay::Open(p))

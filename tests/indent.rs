@@ -7,7 +7,8 @@
 mod common;
 
 use common::*;
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
+use vibe::commands::Command;
 
 /// A file with a two-space body, opened in an editor whose settings say four.
 fn two_space_file(scratch: &Scratch) -> std::path::PathBuf {
@@ -203,4 +204,130 @@ fn two_files_in_one_session_keep_their_own_styles() {
     app.focus_buffer(0);
     assert!(app.indent_style().use_spaces, "and now the space file");
     assert_eq!(app.indent_style().width, 2);
+}
+
+// ------------------------------------------------------- changing the style
+
+/// Open the indentation prompt the way a user does.
+fn indent_prompt(app: &mut vibe::app::App) {
+    press(
+        app,
+        KeyCode::Char('i'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    );
+}
+
+/// What the prompt is seeded with, when it is open.
+fn prompt_text(app: &vibe::app::App) -> Option<String> {
+    match &app.ui.overlay {
+        vibe::ui::Overlay::Indent(input) => Some(input.value().to_string()),
+        _ => None,
+    }
+}
+
+#[test]
+fn the_prompt_is_seeded_with_the_style_in_force() {
+    let scratch = Scratch::new();
+    let spaces = two_space_file(&scratch);
+    let tabs = tab_file(&scratch);
+
+    let mut app = editor(scratch.path());
+    open(&mut app, &spaces);
+    indent_prompt(&mut app);
+    assert_eq!(prompt_text(&app).as_deref(), Some("2"));
+
+    let mut app = editor(scratch.path());
+    open(&mut app, &tabs);
+    indent_prompt(&mut app);
+    assert_eq!(prompt_text(&app).as_deref(), Some("tab"));
+}
+
+#[test]
+fn the_prompt_changes_the_width_of_this_buffer() {
+    let scratch = Scratch::new();
+    let path = tab_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+    assert!(!app.indent_style().use_spaces, "a tab file to begin with");
+
+    indent_prompt(&mut app);
+    ctrl(&mut app, 'u');
+    type_str(&mut app, "3");
+    plain(&mut app, KeyCode::Enter);
+
+    assert!(app.indent_style().use_spaces);
+    assert_eq!(app.indent_style().width, 3);
+    assert!(screen_has(&mut app, 100, 24, "Spaces: 3"));
+
+    // And Tab now inserts what was asked for.
+    ctrl(&mut app, KeyCode::Home);
+    plain(&mut app, KeyCode::Tab);
+    assert_eq!(app.active_doc().unwrap().line_text(0), "   func main() {");
+}
+
+#[test]
+fn the_prompt_can_switch_a_file_to_tabs() {
+    let scratch = Scratch::new();
+    let path = two_space_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    indent_prompt(&mut app);
+    ctrl(&mut app, 'u');
+    type_str(&mut app, "tab");
+    plain(&mut app, KeyCode::Enter);
+
+    assert!(!app.indent_style().use_spaces);
+    assert!(screen_has(&mut app, 100, 24, "Tabs"));
+
+    ctrl(&mut app, KeyCode::Home);
+    plain(&mut app, KeyCode::Tab);
+    assert_eq!(app.active_doc().unwrap().line_text(0), "\tdef f():");
+}
+
+#[test]
+fn a_bad_answer_keeps_the_prompt_open() {
+    let scratch = Scratch::new();
+    let path = two_space_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    indent_prompt(&mut app);
+    ctrl(&mut app, 'u');
+    type_str(&mut app, "wide");
+    plain(&mut app, KeyCode::Enter);
+
+    assert!(prompt_text(&app).is_some(), "still asking");
+    assert!(screen_has(&mut app, 100, 24, "Not an indentation"));
+    assert_eq!(app.indent_style().width, 2, "and nothing changed");
+}
+
+#[test]
+fn escape_leaves_the_style_alone() {
+    let scratch = Scratch::new();
+    let path = two_space_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    indent_prompt(&mut app);
+    ctrl(&mut app, 'u');
+    type_str(&mut app, "8");
+    plain(&mut app, KeyCode::Esc);
+
+    assert!(prompt_text(&app).is_none(), "the prompt closed");
+    assert_eq!(app.indent_style().width, 2, "and the file kept its own");
+}
+
+#[test]
+fn the_prompt_is_a_command_like_any_other() {
+    assert_eq!(Command::SetIndentation.id(), "edit.setIndentation");
+    assert!(Command::SetIndentation
+        .default_keys()
+        .contains(&"ctrl+shift+i"));
+
+    let scratch = Scratch::new();
+    let mut app = editor(scratch.path());
+    app.open_palette(vibe::ui::PaletteMode::Commands);
+    type_str(&mut app, "indentation");
+    assert!(screen_has(&mut app, 100, 30, "Set Indentation"));
 }

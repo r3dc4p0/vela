@@ -44,6 +44,12 @@ The status bar says which style is in force; `use_spaces` and `tab_width`
 describe new buffers and files whose text says nothing. Turn it off with
 `detect_indent = false`.
 
+**Changing it** — `Ctrl+Shift+I` asks for the indentation this buffer should
+use: type a width (`2`, `4`, `8`, anything from 1 to 16) for spaces, or `tab`.
+It is pre-filled with what is in force, so opening it and pressing Enter changes
+nothing. The answer applies to the buffer, not to the settings, which are what
+new buffers start from.
+
 **Indent guides** — a faint rule marks the start of every indentation block and
 runs to its last line, so a function or an if/else can be followed to where it
 ends. Blank lines inside a block keep the rule; the line that closes the block

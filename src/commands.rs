@@ -75,6 +75,7 @@ pub enum Command {
 
     // Navigate
     GotoLine,
+    SetIndentation,
     GotoBufferStart,
     GotoBufferEnd,
 
@@ -145,6 +146,7 @@ impl Command {
         Command::AddCursorToNextOccurrence,
         Command::CollapseCursors,
         Command::GotoLine,
+        Command::SetIndentation,
         Command::GotoBufferStart,
         Command::GotoBufferEnd,
         Command::Find,
@@ -209,6 +211,7 @@ impl Command {
             Command::AddCursorToNextOccurrence => "edit.addCursorToNext",
             Command::CollapseCursors => "edit.collapseCursors",
             Command::GotoLine => "nav.gotoLine",
+            Command::SetIndentation => "edit.setIndentation",
             Command::GotoBufferStart => "nav.bufferStart",
             Command::GotoBufferEnd => "nav.bufferEnd",
             Command::Find => "search.find",
@@ -274,6 +277,7 @@ impl Command {
             Command::AddCursorToNextOccurrence => "Add Cursor at Next Occurrence",
             Command::CollapseCursors => "Collapse to One Cursor",
             Command::GotoLine => "Go to Line…",
+            Command::SetIndentation => "Set Indentation…",
             Command::GotoBufferStart => "Go to Start of Buffer",
             Command::GotoBufferEnd => "Go to End of Buffer",
             Command::Find => "Find…",
@@ -333,6 +337,7 @@ impl Command {
             | Command::ToggleComment
             | Command::Indent
             | Command::Dedent
+            | Command::SetIndentation
             | Command::TrimTrailingWhitespace
             | Command::AddCursorAbove
             | Command::AddCursorBelow
@@ -396,6 +401,7 @@ impl Command {
             Command::QuickOpen => &["ctrl+p"],
             Command::CommandPalette => &["ctrl+shift+p"],
             Command::GotoLine => &["ctrl+g"],
+            Command::SetIndentation => &["ctrl+shift+i"],
             Command::CloseBuffer => &["ctrl+w"],
             Command::NextBuffer => &["ctrl+tab"],
             Command::PrevBuffer => &["ctrl+shift+tab"],
@@ -487,7 +493,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 59);
+        assert_eq!(Command::ALL.len(), 60);
     }
 
     #[test]

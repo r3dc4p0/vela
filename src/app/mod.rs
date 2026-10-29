@@ -1118,6 +1118,7 @@ impl App {
             Command::CollapseCursors => self.collapse_cursors(),
 
             Command::GotoLine => self.goto_prompt(),
+            Command::SetIndentation => self.indent_prompt(),
             Command::GotoBufferStart => self.move_cursor(Motion::DocStart, false),
             Command::GotoBufferEnd => self.move_cursor(Motion::DocEnd, false),
 

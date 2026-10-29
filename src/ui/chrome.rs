@@ -663,6 +663,7 @@ pub enum OverlayKind {
     Find,
     Replace,
     GotoLine,
+    Indent,
     Open,
     SaveAs,
     Confirm,

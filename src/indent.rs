@@ -33,6 +33,27 @@ impl IndentStyle {
         }
     }
 
+    /// Read what the prompt accepts: `4` or `2` for spaces, `tab` for a tab.
+    ///
+    /// `width_when_tabs` is the width to remember alongside tabs, which have no
+    /// width of their own but still need one for Shift+Tab.
+    pub fn parse(value: &str, width_when_tabs: usize) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "tab" | "tabs" | "t" => Some(Self {
+                use_spaces: false,
+                width: width_when_tabs.clamp(1, 16),
+            }),
+            other => other
+                .parse::<usize>()
+                .ok()
+                .filter(|width| (1..=16).contains(width))
+                .map(|width| Self {
+                    use_spaces: true,
+                    width,
+                }),
+        }
+    }
+
     /// How the status bar names it: `Spaces: 2`, `Tabs`.
     pub fn label(&self) -> String {
         if self.use_spaces {
@@ -314,6 +335,52 @@ mod tests {
         };
         assert_eq!(tabs.unit(), "\t");
         assert_eq!(tabs.label(), "Tabs");
+    }
+
+    #[test]
+    fn the_prompt_accepts_a_width_or_tab() {
+        let four = IndentStyle {
+            use_spaces: true,
+            width: 4,
+        };
+        assert_eq!(
+            IndentStyle::parse("2", 4),
+            Some(IndentStyle {
+                use_spaces: true,
+                width: 2
+            })
+        );
+        assert_eq!(
+            IndentStyle::parse(" 8 ", 4),
+            Some(IndentStyle {
+                use_spaces: true,
+                width: 8
+            })
+        );
+        assert_eq!(
+            IndentStyle::parse("tab", 4),
+            Some(IndentStyle {
+                use_spaces: false,
+                width: 4
+            })
+        );
+        assert_eq!(
+            IndentStyle::parse("TABS", 2),
+            Some(IndentStyle {
+                use_spaces: false,
+                width: 2
+            })
+        );
+        assert_eq!(
+            IndentStyle::parse("0", 4),
+            None,
+            "zero columns is not an indent"
+        );
+        assert_eq!(IndentStyle::parse("17", 4), None, "nor is seventeen");
+        assert_eq!(IndentStyle::parse("", 4), None);
+        assert_eq!(IndentStyle::parse("four", 4), None);
+        assert_eq!(IndentStyle::parse("-2", 4), None);
+        let _ = four;
     }
 
     #[test]

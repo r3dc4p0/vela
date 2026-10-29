@@ -10,6 +10,7 @@ use super::App;
 use crate::buffer::Edit;
 use crate::commands::Command;
 use crate::fuzzy;
+use crate::indent::IndentStyle;
 use crate::search::{self, Query};
 use crate::ui::{
     FindBar, HelpState, Overlay, Palette, PaletteAction, PaletteItem, PaletteMode, ReplaceBar,
@@ -185,6 +186,21 @@ impl App {
 
     pub fn goto_prompt(&mut self) {
         self.ui.overlay = Overlay::GotoLine(TextInput::new());
+    }
+
+    /// Ask for the indentation this buffer should use.
+    ///
+    /// The answer applies to the buffer, not to the configuration: a file that
+    /// is written with two spaces is a fact about that file, and the settings
+    /// are what *new* buffers start from.
+    pub fn indent_prompt(&mut self) {
+        let style = self.indent_style();
+        let seed = if style.use_spaces {
+            style.width.to_string()
+        } else {
+            "tab".to_string()
+        };
+        self.ui.overlay = Overlay::Indent(TextInput::with(seed));
     }
 
     /// Push the overlay's query into the search engine.
@@ -458,6 +474,29 @@ impl App {
                 _ => {
                     edit_prompt(&mut input, &key);
                     self.ui.overlay = Overlay::GotoLine(input);
+                }
+            },
+            Overlay::Indent(mut input) => match key.code {
+                KeyCode::Esc => {}
+                KeyCode::Enter => {
+                    let value = input.value().trim().to_string();
+                    let current = self.indent_style();
+                    match IndentStyle::parse(&value, current.width) {
+                        Some(style) => {
+                            if let Some(doc) = self.active_doc_mut() {
+                                doc.set_indent_style(Some(style));
+                            }
+                            self.info(format!("Indentation: {}", style.label()));
+                        }
+                        None => {
+                            self.warn(format!("Not an indentation: {value} — try 2, 4, 8 or tab"));
+                            self.ui.overlay = Overlay::Indent(input);
+                        }
+                    }
+                }
+                _ => {
+                    edit_prompt(&mut input, &key);
+                    self.ui.overlay = Overlay::Indent(input);
                 }
             },
             Overlay::Open(mut p) => match key.code {
