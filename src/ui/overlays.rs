@@ -415,7 +415,7 @@ fn draw_confirm(
         w,
         h,
     );
-    let inner = panel(buf, rect, "Confirm", theme, deco);
+    let inner = panel(buf, rect, &confirm.title, theme, deco);
     if inner.height < 2 {
         return None;
     }

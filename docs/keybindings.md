@@ -41,18 +41,28 @@ Run `vibe --list-keys` to print the table for your current configuration.
 | `Tab` / `Shift+Tab` | — | Indent / dedent (inserts at the cursor without a selection); the unit is the one the file itself uses |
 | `Ctrl+Shift+W` | `view.wordCount` | Word, character and line count |
 | `Ctrl+Shift+A` | `edit.toggleAutoPairs` | Auto-close brackets and quotes on / off |
-| `Ctrl+Shift+I` | `edit.setIndentation` | Set this buffer's indentation: a width (`2`, `4`, `8`), or `tab` |
+| `Ctrl+Shift+I` | `edit.setIndentation` | Choose this buffer's indentation: tabs, 2, 4 or 8 spaces |
 
 ## Indentation
 
 Each file's indentation is read when it opens, so Tab and Enter match the file
 rather than a global setting. When the reading is wrong — or when you want to
-change it — `Ctrl+Shift+I` asks, pre-filled with what is in force:
+change it — `Ctrl+Shift+I` opens a menu with the choice in it, the current one
+selected:
 
-| You type | You get |
-| --- | --- |
-| `2`, `4`, `8`, or any width from 1 to 16 | spaces, that many per level |
-| `tab` (or `tabs`, `t`) | tabs; the remembered width stays for Shift+Tab |
+```
+ Indentation
+ Indent this buffer with:
+   Tabs
+   Spaces: 2
+   Spaces: 4
+   Spaces: 8
+   Other width…
+```
+
+Arrow keys move, Enter takes the row under the cursor, Esc cancels. Because the
+menu opens on the style in force, opening it to look and pressing Enter changes
+nothing. `Other width…` asks for a number from 1 to 16, or `tab`.
 
 The answer applies to **this buffer**, not to the configuration: a file written
 with two spaces is a fact about that file. The settings in `[editor]` are what

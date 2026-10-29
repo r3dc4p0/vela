@@ -177,11 +177,15 @@ pub enum ConfirmAction {
     CloseBuffer(usize),
     Reload,
     OverwriteExternal,
+    /// Pick an indentation from a menu; the choice is the item index.
+    SetIndent,
 }
 
 /// A modal yes/no/… dialog.
 #[derive(Debug, Clone)]
 pub struct Confirm {
+    /// Panel title: what this dialog is about.
+    pub title: String,
     pub prompt: String,
     pub items: Vec<String>,
     pub selected: usize,

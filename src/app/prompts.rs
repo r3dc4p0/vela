@@ -12,9 +12,10 @@ use crate::commands::Command;
 use crate::fuzzy;
 use crate::indent::IndentStyle;
 use crate::search::{self, Query};
+use crate::ui::ConfirmAction;
 use crate::ui::{
-    FindBar, HelpState, Overlay, Palette, PaletteAction, PaletteItem, PaletteMode, ReplaceBar,
-    TextInput,
+    Confirm, FindBar, HelpState, Overlay, Palette, PaletteAction, PaletteItem, PaletteMode,
+    ReplaceBar, TextInput,
 };
 
 /// How many palette rows are built at most.
@@ -188,12 +189,44 @@ impl App {
         self.ui.overlay = Overlay::GotoLine(TextInput::new());
     }
 
-    /// Ask for the indentation this buffer should use.
+    /// Ask which indentation this buffer should use.
+    ///
+    /// A menu rather than a text field: "tabs" is a choice, and a field whose
+    /// only hint is a suffix is a poor way to offer one. The list opens on the
+    /// style in force, so Enter alone changes nothing.
+    pub fn indent_prompt(&mut self) {
+        let style = self.indent_style();
+        let selected = if !style.use_spaces {
+            0
+        } else {
+            match style.width {
+                2 => 1,
+                4 => 2,
+                8 => 3,
+                _ => 4,
+            }
+        };
+        self.ui.overlay = Overlay::Confirm(Confirm {
+            title: "Indentation".to_string(),
+            prompt: "Indent this buffer with:".to_string(),
+            items: vec![
+                "Tabs".to_string(),
+                "Spaces: 2".to_string(),
+                "Spaces: 4".to_string(),
+                "Spaces: 8".to_string(),
+                "Other width…".to_string(),
+            ],
+            selected,
+            action: ConfirmAction::SetIndent,
+        });
+    }
+
+    /// Ask for a width the menu does not list.
     ///
     /// The answer applies to the buffer, not to the configuration: a file that
     /// is written with two spaces is a fact about that file, and the settings
     /// are what *new* buffers start from.
-    pub fn indent_prompt(&mut self) {
+    pub fn indent_width_prompt(&mut self) {
         let style = self.indent_style();
         let seed = if style.use_spaces {
             style.width.to_string()

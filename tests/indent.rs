@@ -208,8 +208,8 @@ fn two_files_in_one_session_keep_their_own_styles() {
 
 // ------------------------------------------------------- changing the style
 
-/// Open the indentation prompt the way a user does.
-fn indent_prompt(app: &mut vibe::app::App) {
+/// Open the indentation menu the way a user does.
+fn indent_menu(app: &mut vibe::app::App) {
     press(
         app,
         KeyCode::Char('i'),
@@ -217,67 +217,76 @@ fn indent_prompt(app: &mut vibe::app::App) {
     );
 }
 
-/// What the prompt is seeded with, when it is open.
-fn prompt_text(app: &vibe::app::App) -> Option<String> {
+/// The menu's items and which one is selected, when it is open.
+fn menu(app: &vibe::app::App) -> Option<(usize, Vec<String>)> {
+    match &app.ui.overlay {
+        vibe::ui::Overlay::Confirm(c) => Some((c.selected, c.items.clone())),
+        _ => None,
+    }
+}
+
+/// The width prompt's contents, when it is open.
+fn width_prompt(app: &vibe::app::App) -> Option<String> {
     match &app.ui.overlay {
         vibe::ui::Overlay::Indent(input) => Some(input.value().to_string()),
         _ => None,
     }
 }
 
+/// Move the menu selection to `index` and take it.
+///
+/// The menu opens on the current style, so the walk starts by going to the top
+/// rather than counting from wherever the selection happens to be.
+fn choose(app: &mut vibe::app::App, index: usize) {
+    for _ in 0..10 {
+        plain(app, KeyCode::Up);
+    }
+    for _ in 0..index {
+        plain(app, KeyCode::Down);
+    }
+    plain(app, KeyCode::Enter);
+}
+
 #[test]
-fn the_prompt_is_seeded_with_the_style_in_force() {
+fn the_menu_opens_on_the_style_in_force() {
     let scratch = Scratch::new();
     let spaces = two_space_file(&scratch);
     let tabs = tab_file(&scratch);
 
     let mut app = editor(scratch.path());
     open(&mut app, &spaces);
-    indent_prompt(&mut app);
-    assert_eq!(prompt_text(&app).as_deref(), Some("2"));
+    indent_menu(&mut app);
+    let (selected, items) = menu(&app).expect("the menu is open");
+    assert_eq!(
+        items,
+        vec![
+            "Tabs",
+            "Spaces: 2",
+            "Spaces: 4",
+            "Spaces: 8",
+            "Other width…"
+        ]
+    );
+    assert_eq!(selected, 1, "two spaces is the second row");
 
     let mut app = editor(scratch.path());
     open(&mut app, &tabs);
-    indent_prompt(&mut app);
-    assert_eq!(prompt_text(&app).as_deref(), Some("tab"));
+    indent_menu(&mut app);
+    assert_eq!(menu(&app).expect("open").0, 0, "tabs is the first row");
 }
 
 #[test]
-fn the_prompt_changes_the_width_of_this_buffer() {
-    let scratch = Scratch::new();
-    let path = tab_file(&scratch);
-    let mut app = editor(scratch.path());
-    open(&mut app, &path);
-    assert!(!app.indent_style().use_spaces, "a tab file to begin with");
-
-    indent_prompt(&mut app);
-    ctrl(&mut app, 'u');
-    type_str(&mut app, "3");
-    plain(&mut app, KeyCode::Enter);
-
-    assert!(app.indent_style().use_spaces);
-    assert_eq!(app.indent_style().width, 3);
-    assert!(screen_has(&mut app, 100, 24, "Spaces: 3"));
-
-    // And Tab now inserts what was asked for.
-    ctrl(&mut app, KeyCode::Home);
-    plain(&mut app, KeyCode::Tab);
-    assert_eq!(app.active_doc().unwrap().line_text(0), "   func main() {");
-}
-
-#[test]
-fn the_prompt_can_switch_a_file_to_tabs() {
+fn the_menu_offers_tabs() {
     let scratch = Scratch::new();
     let path = two_space_file(&scratch);
     let mut app = editor(scratch.path());
     open(&mut app, &path);
+    assert!(app.indent_style().use_spaces, "spaces to begin with");
 
-    indent_prompt(&mut app);
-    ctrl(&mut app, 'u');
-    type_str(&mut app, "tab");
-    plain(&mut app, KeyCode::Enter);
+    indent_menu(&mut app);
+    choose(&mut app, 0);
 
-    assert!(!app.indent_style().use_spaces);
+    assert!(!app.indent_style().use_spaces, "tabs now");
     assert!(screen_has(&mut app, 100, 24, "Tabs"));
 
     ctrl(&mut app, KeyCode::Home);
@@ -286,18 +295,55 @@ fn the_prompt_can_switch_a_file_to_tabs() {
 }
 
 #[test]
-fn a_bad_answer_keeps_the_prompt_open() {
+fn the_menu_offers_widths() {
+    let scratch = Scratch::new();
+    let path = tab_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    indent_menu(&mut app);
+    choose(&mut app, 3); // "Spaces: 8"
+
+    assert!(app.indent_style().use_spaces);
+    assert_eq!(app.indent_style().width, 8);
+    assert!(screen_has(&mut app, 100, 24, "Spaces: 8"));
+}
+
+#[test]
+fn other_width_asks_for_a_number() {
+    // The menu lists 2, 4 and 8; anything else goes through the width prompt,
+    // which is seeded with the width in force.
     let scratch = Scratch::new();
     let path = two_space_file(&scratch);
     let mut app = editor(scratch.path());
     open(&mut app, &path);
 
-    indent_prompt(&mut app);
+    indent_menu(&mut app);
+    choose(&mut app, 4); // "Other width…"
+    assert_eq!(width_prompt(&app).as_deref(), Some("2"), "seeded");
+
+    ctrl(&mut app, 'u');
+    type_str(&mut app, "3");
+    plain(&mut app, KeyCode::Enter);
+
+    assert!(app.indent_style().use_spaces);
+    assert_eq!(app.indent_style().width, 3);
+}
+
+#[test]
+fn a_bad_width_keeps_the_prompt_open() {
+    let scratch = Scratch::new();
+    let path = two_space_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    indent_menu(&mut app);
+    choose(&mut app, 4);
     ctrl(&mut app, 'u');
     type_str(&mut app, "wide");
     plain(&mut app, KeyCode::Enter);
 
-    assert!(prompt_text(&app).is_some(), "still asking");
+    assert!(width_prompt(&app).is_some(), "still asking");
     assert!(screen_has(&mut app, 100, 24, "Not an indentation"));
     assert_eq!(app.indent_style().width, 2, "and nothing changed");
 }
@@ -309,17 +355,32 @@ fn escape_leaves_the_style_alone() {
     let mut app = editor(scratch.path());
     open(&mut app, &path);
 
-    indent_prompt(&mut app);
-    ctrl(&mut app, 'u');
-    type_str(&mut app, "8");
+    indent_menu(&mut app);
+    plain(&mut app, KeyCode::Down);
     plain(&mut app, KeyCode::Esc);
 
-    assert!(prompt_text(&app).is_none(), "the prompt closed");
+    assert!(menu(&app).is_none(), "the menu closed");
     assert_eq!(app.indent_style().width, 2, "and the file kept its own");
+    assert!(app.indent_style().use_spaces);
 }
 
 #[test]
-fn the_prompt_is_a_command_like_any_other() {
+fn enter_on_the_selected_row_changes_nothing() {
+    // The menu opens on the style in force, so the safe action is the one under
+    // the cursor: a reader who opens it to look cannot break the file.
+    let scratch = Scratch::new();
+    let path = two_space_file(&scratch);
+    let mut app = editor(scratch.path());
+    open(&mut app, &path);
+
+    indent_menu(&mut app);
+    plain(&mut app, KeyCode::Enter);
+    assert_eq!(app.indent_style().width, 2);
+    assert!(app.indent_style().use_spaces);
+}
+
+#[test]
+fn the_menu_is_a_command_like_any_other() {
     assert_eq!(Command::SetIndentation.id(), "edit.setIndentation");
     assert!(Command::SetIndentation
         .default_keys()

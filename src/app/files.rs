@@ -22,6 +22,7 @@ use crate::commands::Command;
 use crate::editing;
 use crate::filesystem::{self, LoadedFile};
 use crate::indent;
+use crate::indent::IndentStyle;
 use crate::ui::{Confirm, ConfirmAction, Level, Overlay, PathPrompt};
 
 /// How long an open may take before the loader panel appears.
@@ -324,6 +325,7 @@ impl App {
         if self.buffers[idx].is_modified() && self.config.editor.confirm_unsaved {
             let name = self.buffers[idx].display_name();
             self.ui.overlay = Overlay::Confirm(Confirm {
+                title: "Close buffer".to_string(),
                 prompt: format!("{name} has unsaved changes."),
                 items: vec![
                     "Save and close".to_string(),
@@ -444,6 +446,7 @@ impl App {
                 self.buffers[idx].set_externally_modified(true);
                 let name = path.display().to_string();
                 self.ui.overlay = Overlay::Confirm(Confirm {
+                    title: "Changed on disk".to_string(),
                     prompt: format!("{name} changed on disk since it was opened."),
                     items: vec![
                         "Overwrite".to_string(),
@@ -534,6 +537,7 @@ impl App {
         };
         if self.buffers[idx].is_modified() {
             self.ui.overlay = Overlay::Confirm(Confirm {
+                title: "Reload".to_string(),
                 prompt: format!(
                     "Discard changes to {} and reload from disk?",
                     path.display()
@@ -576,6 +580,7 @@ impl App {
                 format!("{n} buffer(s) have unsaved changes.")
             };
             self.ui.overlay = Overlay::Confirm(Confirm {
+                title: "Quit".to_string(),
                 prompt,
                 items: vec![
                     "Save all and quit".to_string(),
@@ -893,6 +898,40 @@ pub(crate) fn handle_confirm(app: &mut App, action: ConfirmAction, choice: usize
             app.remove_buffer(idx);
         }
         (ConfirmAction::CloseBuffer(_), _) => app.ui.overlay = Overlay::None,
+        (ConfirmAction::SetIndent, choice) => {
+            app.ui.overlay = Overlay::None;
+            let current = app.indent_style();
+            let style = match choice {
+                0 => Some(IndentStyle {
+                    use_spaces: false,
+                    width: current.width,
+                }),
+                1 => Some(IndentStyle {
+                    use_spaces: true,
+                    width: 2,
+                }),
+                2 => Some(IndentStyle {
+                    use_spaces: true,
+                    width: 4,
+                }),
+                3 => Some(IndentStyle {
+                    use_spaces: true,
+                    width: 8,
+                }),
+                // "Other…" asks for a width the menu does not list.
+                4 => {
+                    app.indent_width_prompt();
+                    None
+                }
+                _ => None,
+            };
+            if let Some(style) = style {
+                if let Some(doc) = app.active_doc_mut() {
+                    doc.set_indent_style(Some(style));
+                }
+                app.info(format!("Indentation: {}", style.label()));
+            }
+        }
         (ConfirmAction::Reload, 0) => {
             app.ui.overlay = Overlay::None;
             if let Some(idx) = app.active_index() {
