@@ -29,7 +29,7 @@ impl App {
     }
 
     pub fn open_palette(&mut self, mode: PaletteMode) {
-        if mode == PaletteMode::Files {
+        if matches!(mode, PaletteMode::Files | PaletteMode::Compare) {
             self.ensure_file_index();
         }
         let mut palette = Palette::new(mode);
@@ -70,7 +70,8 @@ impl App {
     fn items_for(&self, mode: PaletteMode, query: &str) -> Vec<PaletteItem> {
         match mode {
             PaletteMode::Commands => self.command_items(query),
-            PaletteMode::Files => self.file_items(query),
+            PaletteMode::Files => self.file_items(query, false),
+            PaletteMode::Compare => self.file_items(query, true),
         }
     }
 
@@ -104,7 +105,7 @@ impl App {
             .collect()
     }
 
-    fn file_items(&self, query: &str) -> Vec<PaletteItem> {
+    fn file_items(&self, query: &str, compare: bool) -> Vec<PaletteItem> {
         let Some(index) = &self.file_index else {
             return Vec::new();
         };
@@ -117,7 +118,11 @@ impl App {
                     label: rel,
                     detail: String::new(),
                     positions: m.positions,
-                    action: PaletteAction::OpenFile(full),
+                    action: if compare {
+                        PaletteAction::CompareFile(full)
+                    } else {
+                        PaletteAction::OpenFile(full)
+                    },
                 }
             })
             .collect()
@@ -652,6 +657,7 @@ impl App {
         match action {
             PaletteAction::Run(cmd) => self.execute(cmd),
             PaletteAction::OpenFile(path) => self.open_path(path),
+            PaletteAction::CompareFile(path) => self.compare_with_path(path),
         }
     }
 }

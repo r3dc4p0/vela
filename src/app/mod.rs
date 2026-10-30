@@ -10,6 +10,7 @@
 //!
 //! Nothing in here knows about rendering details; `ui::draw` reads this state.
 
+mod diff;
 mod files;
 mod panes;
 mod prompts;
@@ -39,6 +40,7 @@ use crate::syntax::StateCache;
 use crate::theme::Theme;
 use crate::ui::{self, Confirm, ConfirmAction, Level, Message, Overlay, PathPrompt, UiState};
 
+pub use diff::DiffView;
 pub use files::{Loading, OpenedBuffer, LOADER_DELAY};
 pub use panes::{Pane, MIN_PANE_WIDTH};
 
@@ -127,6 +129,17 @@ pub struct App {
     /// When false, recents and session state are neither read nor written.
     /// Integration tests use this so they never touch the real user profile.
     pub persist: bool,
+    /// The comparison being shown, if any.
+    ///
+    /// A view mode rather than a buffer: it borrows two documents that are
+    /// already open, so nothing here can go stale against its text — closing
+    /// one of the two closes the view (see `close_active`).
+    pub diff: Option<DiffView>,
+    /// A comparison waiting for its file to finish loading.
+    ///
+    /// `(the buffer to compare with, the path being opened)`. Held rather than
+    /// computed because a large file arrives from the worker thread later.
+    pending_compare: Option<(usize, PathBuf)>,
 }
 
 impl App {
@@ -229,6 +242,8 @@ impl App {
             file_index: None,
             index_loading: false,
             quit_pending: false,
+            diff: None,
+            pending_compare: None,
             brackets_cache: None,
             last_click: None,
             click_count: 0,
@@ -485,7 +500,29 @@ impl App {
             return;
         }
 
+        // The diff view owns the scrolling keys while it is open. Everything
+        // else still resolves through the keymap — quitting, the palette, the
+        // theme — but an edit would change a document that is not on screen,
+        // so text input is dropped rather than applied.
+        let in_diff = self.diff.is_some();
+        if in_diff && self.handle_diff_key(&key) {
+            return;
+        }
+
         let action = input::translate(&key, &self.keymap);
+        if in_diff
+            && matches!(
+                action,
+                Action::InsertText(_)
+                    | Action::InsertNewline
+                    | Action::InsertTab
+                    | Action::Dedent
+                    | Action::Backspace
+                    | Action::DeleteForward
+            )
+        {
+            return;
+        }
         match action {
             Action::InsertText(text) => self.type_text(&text),
             Action::InsertNewline => self.insert_newline(),
@@ -506,8 +543,15 @@ impl App {
             return;
         }
         match mouse.kind {
+            // The diff view covers the whole editing area and has one scroll
+            // offset, so the pointer's column is irrelevant there.
+            MouseEventKind::ScrollUp if self.diff.is_some() => self.diff_scroll(-3),
+            MouseEventKind::ScrollDown if self.diff.is_some() => self.diff_scroll(3),
             MouseEventKind::ScrollUp => self.wheel_vertical_at(mouse.column, mouse.row, -3),
             MouseEventKind::ScrollDown => self.wheel_vertical_at(mouse.column, mouse.row, 3),
+            // Clicks and the horizontal wheel have nothing to act on: the
+            // columns are read-only and do not scroll sideways.
+            _ if self.diff.is_some() => {}
             MouseEventKind::ScrollLeft => self.wheel_horizontal_at(mouse.column, mouse.row, -4),
             MouseEventKind::ScrollRight => self.wheel_horizontal_at(mouse.column, mouse.row, 4),
             MouseEventKind::Down(MouseButton::Left) => {
@@ -1065,6 +1109,10 @@ impl App {
             Command::SaveAs => self.save_as_prompt(),
             Command::SaveAll => self.save_all(),
             Command::Reload => self.reload_active(),
+            Command::CompareWith => self.compare_prompt(),
+            Command::CloseDiff => self.close_diff(),
+            Command::DiffNextChange => self.diff_step_change(true),
+            Command::DiffPrevChange => self.diff_step_change(false),
             Command::CloseBuffer => self.close_active(),
             Command::NextBuffer => self.cycle_buffer(1),
             Command::PrevBuffer => self.cycle_buffer(-1),

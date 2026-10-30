@@ -227,9 +227,11 @@ impl App {
     /// document: everything expensive has happened by the time this runs, and
     /// all that is left is a `Vec` push.
     pub(crate) fn install(&mut self, path: PathBuf, opened: OpenedBuffer) {
-        self.adopt(opened.document);
+        let idx = self.adopt(opened.document);
         self.add_recent(&path);
         self.search.clear();
+        // A comparison may have been waiting for this file to finish loading.
+        self.finish_pending_compare(&path, idx);
 
         if opened.mixed_eol {
             self.warn(format!(

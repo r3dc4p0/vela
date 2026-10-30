@@ -489,40 +489,67 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
     // blank the bar has always ended with.
     let tail = if deco.pill { " " } else { "   " };
     let mut spans: Vec<(String, Style)> = Vec::new();
-    if app.search.active && !app.search.query.is_empty() {
+    if let Some(view) = &app.diff {
+        // A comparison has no cursor to report — the buffer it belongs to is
+        // not on screen. What is worth knowing is which change is in view and
+        // how far through the rows the reader is.
+        match view.position() {
+            Some((here, total)) => spans.push((
+                format!("{here}/{total} changes{gap}"),
+                Style::default().fg(theme.statusbar_accent),
+            )),
+            None => spans.push((
+                format!("no changes{gap}"),
+                Style::default().fg(theme.statusbar_fg),
+            )),
+        }
         spans.push((
-            format!("{}{gap}", app.search.counter()),
+            format!("row {}/{}{gap}", view.scroll + 1, view.rows.len().max(1)),
+            Style::default().fg(theme.statusbar_fg),
+        ));
+        spans.push((
+            format!(
+                "+{} −{} ~{}{tail}",
+                view.stats.added, view.stats.removed, view.stats.changed
+            ),
             Style::default().fg(theme.statusbar_accent),
-        ));
-    }
-    if doc.caret_count() > 1 {
-        spans.push((
-            format!("{} cursors{gap}", doc.caret_count()),
-            Style::default().fg(theme.statusbar_accent),
-        ));
-    }
-    if let Some(arrow) = away {
-        spans.push((
-            format!("{arrow} Ln {line}{gap}"),
-            Style::default().fg(theme.statusbar_away),
-        ));
-    }
-    spans.push((
-        format!("Ln {line}, Col {col}{gap}"),
-        Style::default().fg(theme.statusbar_accent),
-    ));
-    if deco.pill {
-        spans.push((
-            format!(" {pct}% {tail}"),
-            Style::default()
-                .fg(theme.statusbar_accent)
-                .bg(theme.pill_bg),
         ));
     } else {
+        if app.search.active && !app.search.query.is_empty() {
+            spans.push((
+                format!("{}{gap}", app.search.counter()),
+                Style::default().fg(theme.statusbar_accent),
+            ));
+        }
+        if doc.caret_count() > 1 {
+            spans.push((
+                format!("{} cursors{gap}", doc.caret_count()),
+                Style::default().fg(theme.statusbar_accent),
+            ));
+        }
+        if let Some(arrow) = away {
+            spans.push((
+                format!("{arrow} Ln {line}{gap}"),
+                Style::default().fg(theme.statusbar_away),
+            ));
+        }
         spans.push((
-            format!("{pct}%{tail}"),
+            format!("Ln {line}, Col {col}{gap}"),
             Style::default().fg(theme.statusbar_accent),
         ));
+        if deco.pill {
+            spans.push((
+                format!(" {pct}% {tail}"),
+                Style::default()
+                    .fg(theme.statusbar_accent)
+                    .bg(theme.pill_bg),
+            ));
+        } else {
+            spans.push((
+                format!("{pct}%{tail}"),
+                Style::default().fg(theme.statusbar_accent),
+            ));
+        }
     }
 
     // The block is inset by one column on the right, so the badge at its end
@@ -557,20 +584,30 @@ pub fn draw_hints(buf: &mut Buffer, area: Rect, app: &App) {
     );
 
     let km = &app.keymap;
-    let pairs: Vec<(String, &str)> = match app.ui.overlay.kind() {
-        OverlayKind::None => vec![
-            (km.label_for(Command::Save), "save"),
-            (km.label_for(Command::Find), "find"),
-            (km.label_for(Command::QuickOpen), "open"),
-            (km.label_for(Command::CommandPalette), "commands"),
-            (km.label_for(Command::Help), "help"),
-        ],
-        OverlayKind::Palette => vec![
-            ("↑↓".into(), "select"),
-            ("Enter".into(), "run"),
-            ("Esc".into(), "cancel"),
-        ],
-        _ => vec![("Esc".into(), "cancel")],
+    // A comparison is a view, not an overlay, so it gets its own line rather
+    // than being folded into the overlay match below.
+    let pairs: Vec<(String, &str)> = if app.diff.is_some() && app.ui.overlay.is_none() {
+        vec![
+            ("↑↓".to_string(), "scroll"),
+            ("] [".to_string(), "change"),
+            ("Esc".to_string(), "close"),
+        ]
+    } else {
+        match app.ui.overlay.kind() {
+            OverlayKind::None => vec![
+                (km.label_for(Command::Save), "save"),
+                (km.label_for(Command::Find), "find"),
+                (km.label_for(Command::QuickOpen), "open"),
+                (km.label_for(Command::CommandPalette), "commands"),
+                (km.label_for(Command::Help), "help"),
+            ],
+            OverlayKind::Palette => vec![
+                ("↑↓".into(), "select"),
+                ("Enter".into(), "run"),
+                ("Esc".into(), "cancel"),
+            ],
+            _ => vec![("Esc".into(), "cancel")],
+        }
     };
 
     if !deco.two_tone_hints {

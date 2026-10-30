@@ -114,6 +114,16 @@ pub struct Theme {
     pub bracket_match: Color,
     pub indent_guide: Color,
 
+    /// Background of a line that exists only on the right of a diff.
+    pub diff_add_bg: Color,
+    /// Background of a line that exists only on the left.
+    pub diff_del_bg: Color,
+    /// Background of a row where one side of the diff has nothing.
+    ///
+    /// Darker than the document, so a gap in one column reads as absence
+    /// rather than as a blank line that happens to be there.
+    pub diff_filler_bg: Color,
+
     pub syntax: SyntaxColors,
 }
 
@@ -220,6 +230,14 @@ impl Theme {
             bracket_match: Color::Rgb(0xc8, 0xa0, 0x5a),
             indent_guide: Color::Rgb(0x3a, 0x44, 0x52),
 
+            // Tints rather than colours: the text keeps its own foreground, and
+            // the row says what happened to it. Far enough from the background
+            // to be seen at a glance, dim enough that a screen of them is still
+            // readable.
+            diff_add_bg: Color::Rgb(0x16, 0x28, 0x1c),
+            diff_del_bg: Color::Rgb(0x2e, 0x1a, 0x1e),
+            diff_filler_bg: Color::Rgb(0x0f, 0x12, 0x18),
+
             syntax: SyntaxColors {
                 keyword: Color::Rgb(0xc6, 0x8f, 0xd8),
                 type_: Color::Rgb(0x7a, 0xb8, 0xd8),
@@ -293,6 +311,10 @@ impl Theme {
 
             bracket_match: Color::Rgb(0x9a, 0x6b, 0x1e),
             indent_guide: Color::Rgb(0xd0, 0xd0, 0xc6),
+
+            diff_add_bg: Color::Rgb(0xdc, 0xef, 0xe0),
+            diff_del_bg: Color::Rgb(0xf6, 0xdc, 0xdf),
+            diff_filler_bg: Color::Rgb(0xe9, 0xe9, 0xe4),
 
             syntax: SyntaxColors {
                 keyword: Color::Rgb(0x8a, 0x3f, 0xb0),
@@ -396,6 +418,9 @@ impl Theme {
             "success" => self.success = c,
             "bracket_match" => self.bracket_match = c,
             "indent_guide" => self.indent_guide = c,
+            "diff_add_bg" => self.diff_add_bg = c,
+            "diff_del_bg" => self.diff_del_bg = c,
+            "diff_filler_bg" => self.diff_filler_bg = c,
             "syntax_keyword" => self.syntax.keyword = c,
             "syntax_type" => self.syntax.type_ = c,
             "syntax_constant" => self.syntax.constant = c,

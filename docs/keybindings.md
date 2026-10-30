@@ -17,6 +17,7 @@ Run `vibe --list-keys` to print the table for your current configuration.
 | `Ctrl+W` | `file.close` | Close the buffer (asks when dirty) |
 | `Ctrl+P` | `file.quickOpen` | Fuzzy file finder rooted at the working directory |
 | `Ctrl+Shift+R` | `file.reload` | Reload from disk |
+| `Alt+D` | `file.compareWith` | Compare the buffer with another file, side by side |
 | `Ctrl+Q` | `app.quit` | Quit (asks when there are unsaved changes) |
 | `Ctrl+Shift+Q` | `app.quitAll` | Save all and quit |
 
@@ -156,6 +157,31 @@ horizontally once the longest line ends.
 | `Ctrl+Shift+G` | `view.toggleIndentGuides` | Rule between indentation blocks on / off |
 | `Alt+Z` | `view.toggleWhitespace` | Show tabs, spaces and control characters |
 | `Alt+W` | `view.toggleWordWrap` | Wrap long lines at the window width |
+| — | `view.closeDiff` | Close the comparison view |
+| — | `view.nextChange` / `view.prevChange` | Step through changes (see below) |
+
+### Comparing two files
+
+`Alt+D` asks which file to compare the buffer with — the same picker as
+`Ctrl+P`, because "which file" is the same question. The answer opens a view
+with the two files side by side.
+
+Inside it the two columns share one scroll offset, so they cannot drift apart,
+and a line that exists on only one side is drawn against a shaded gap on the
+other rather than against the wrong line:
+
+| Key | Action |
+| --- | --- |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | Scroll both columns |
+| `]` | Next change |
+| `[` | Previous change |
+| `Esc` | Close the view and return to the text |
+
+`]` and `[` are only keys *here*: bound in the keymap they would stop being
+characters you can type, so the view reads them itself.
+
+The view is read-only. Typing is ignored rather than applied to a buffer you
+cannot see, and closing either of the two files closes the view.
 
 ### Panes
 

@@ -98,6 +98,7 @@ fn draw_palette(
     let title = match palette.mode {
         PaletteMode::Commands => "Commands",
         PaletteMode::Files => "Open File",
+        PaletteMode::Compare => "Compare with",
     };
     let inner = panel(buf, rect, title, theme, deco);
     if inner.height < 2 {

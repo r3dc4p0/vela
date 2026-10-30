@@ -492,6 +492,61 @@ between each pair, and publishes every pane's rect back into the pane — the sa
 the pane it is over, and the divider column belongs to the pane it introduces,
 which is also the pane whose edge carries the accent colour.
 
+### A diff is a list of rows, not two files scrolled together
+
+The obvious way to build a side-by-side diff is to open the two files in two
+panes and scroll them together. It does not work, and the reason is worth
+stating: two files that differ by an inserted line are one line out of step from
+that point on, so scrolling both by the same *line* shows line 41 beside line 42
+for the rest of the file. Syncing the offsets is easy; syncing the *meaning* is
+the problem.
+
+So the alignment is computed once and turned into **rows**. A row is a pair of
+line numbers — or one line and a gap — and both columns are drawn from the same
+row list at the same index. Sync scrolling then is not a feature that had to be
+built: there is one scroll offset, and neither column can drift because neither
+column has an offset of its own. It also means a gap is drawn as a gap (a
+darker cell with no number) instead of as a blank line that could be mistaken
+for content.
+
+`src/diff.rs` computes the rows and knows nothing about the screen;
+`src/ui/diff.rs` draws them and knows nothing about alignment; `src/app/diff.rs`
+holds the view state — which two buffers, where it is scrolled to, how tall the
+last frame was. The view is not a buffer and not a pane: it borrows two
+documents that are already open, so it cannot go stale against their text, and
+closing either of them closes the view.
+
+**Three decisions carry the performance**, because the textbook implementation
+is quadratic:
+
+- **Fingerprints, not text.** Each line is hashed once, in place, without
+  allocating — `TextStorage::line_hash` is where a rope implementation can hash
+  the line's chunks directly. After that a comparison is an integer compare, and
+  the whole of a 100 000-line diff is dominated by the hashing pass (~70 ms).
+  128 bits rather than 64 because a collision would silently make two different
+  lines equal, and a wrong diff is worse than a slow one.
+- **Common prefix and suffix are trimmed first.** Two versions of a file
+  usually agree for hundreds of lines at each end, and trimming them is linear.
+- **Unique lines are anchors.** What remains is split at lines that occur
+  exactly once on both sides, keeping the longest run of them that is in the
+  same order (patience diff), and each gap is aligned on its own. A region with
+  no unique line is emitted directly: lines paired up, then whatever is left
+  over. That pairing is why a rewritten block shows as rows of changed lines
+  rather than as every old line followed by every new one.
+
+The result is `O(n log n)` with linear memory and no worst case that blows up.
+The price is that the edit script is not guaranteed minimal: a moved block reads
+as a deletion plus an insertion rather than as a move, which is what every
+side-by-side view shows anyway. Two limits keep the window responsive — 64 MiB
+of text and a million rows — and hitting one is reported rather than silently
+producing a wrong answer.
+
+**An empty line at the end of a file is not content.** The editor models a file
+ending in a newline as having a final empty line, because that is where the
+caret goes on `Ctrl+End`. Comparing that line would make `abc` and `abc\n`
+different and would draw a phantom last row on every file in the world, so
+`diff::content_lines` is what both the engine and the gutters count.
+
 ### Word wrap is one function, and everyone calls it
 
 Wrapping looks like a rendering detail and is not: the renderer decides where a
@@ -572,6 +627,7 @@ would dominate the startup budget.
 | Workflows | `tests/workflow.rs`: buffers, search, find seeding from the selection, replace, palette, quit, external changes |
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Indent guides | `tests/indent_guides.rs`: the rule runs from a block's first line to its last and stops at the closing brace, a blank line inside keeps it and a blank line after does not, a nested block gets its own, the spacing follows the file's indent width, the toggle and its key work, a flat file has none, and a rule never lands on a character |
+| Diff | `src/diff.rs`: identical files, an inserted, deleted and rewritten line, a rewritten block (paired rows, not all-removals-then-all-additions), an empty side, nothing in common, duplicated lines with no anchor, a large file with one edit, a block inserted in the middle, and a missing final newline not counting as a change. `tests/diff.rs`: both files side by side, the tint on each side, the gap a one-sided row leaves, columns staying aligned across an insertion, one scroll offset moving both, opening on the first change, `]`/`[` stepping through blocks (and through a tall one), the scroll keys stopping at the ends, `Esc` closing, typing not editing, a buffer compared with itself refused, comparing with an open file and with one that has to be opened, closing a compared file closing the view, and the wheel scrolling |
 | Features | `tests/features.rs`: reload (and the confirmation that guards it), recents, session restore, binary refusal, a key override, quick open, trim, regex backreferences, whole-word, UTF-16 and CR round trips, the display toggles, a colour override and the document statistics |
 | Indentation | `tests/indent.rs`: a two-space file indents by two and a tab file by a tab, the file beats the settings, a new buffer uses them, `detect_indent = false` turns it off, a file with no indentation falls back, the status bar names the style, Enter and the pair expansion use the file's width, dedent removes one of its levels, two buffers in one session keep their own styles, and the `Ctrl+Shift+I` menu opens on the current style, offers tabs and the three common widths, sends "Other width…" to the width prompt, refuses a bad width without closing, and cancels on Esc |
 | Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded and stays selected (so it can be surrounded again), backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, `Ctrl+Shift+A` turns the rules off and on, and each of these holds at every caret |

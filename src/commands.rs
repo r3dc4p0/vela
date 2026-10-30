@@ -52,6 +52,10 @@ pub enum Command {
     PrevBuffer,
     Quit,
     QuitAll,
+    CompareWith,
+    CloseDiff,
+    DiffNextChange,
+    DiffPrevChange,
 
     // Edit
     Undo,
@@ -127,6 +131,10 @@ impl Command {
         Command::PrevBuffer,
         Command::Quit,
         Command::QuitAll,
+        Command::CompareWith,
+        Command::CloseDiff,
+        Command::DiffNextChange,
+        Command::DiffPrevChange,
         Command::Undo,
         Command::Redo,
         Command::Cut,
@@ -192,6 +200,10 @@ impl Command {
             Command::PrevBuffer => "buffer.prev",
             Command::Quit => "app.quit",
             Command::QuitAll => "app.quitAll",
+            Command::CompareWith => "file.compareWith",
+            Command::CloseDiff => "view.closeDiff",
+            Command::DiffNextChange => "view.nextChange",
+            Command::DiffPrevChange => "view.prevChange",
             Command::Undo => "edit.undo",
             Command::Redo => "edit.redo",
             Command::Cut => "edit.cut",
@@ -258,6 +270,10 @@ impl Command {
             Command::PrevBuffer => "Previous Buffer",
             Command::Quit => "Quit",
             Command::QuitAll => "Quit All",
+            Command::CompareWith => "Compare with File…",
+            Command::CloseDiff => "Close Diff View",
+            Command::DiffNextChange => "Next Change",
+            Command::DiffPrevChange => "Previous Change",
             Command::Undo => "Undo",
             Command::Redo => "Redo",
             Command::Cut => "Cut",
@@ -323,7 +339,8 @@ impl Command {
             | Command::NextBuffer
             | Command::PrevBuffer
             | Command::Quit
-            | Command::QuitAll => Category::File,
+            | Command::QuitAll
+            | Command::CompareWith => Category::File,
             Command::Undo
             | Command::Redo
             | Command::Cut
@@ -371,6 +388,9 @@ impl Command {
             | Command::ToggleCursorLine
             | Command::ToggleWordWrap
             | Command::WordCount
+            | Command::CloseDiff
+            | Command::DiffNextChange
+            | Command::DiffPrevChange
             | Command::ShowStats => Category::View,
             Command::Help | Command::CommandPalette => Category::Help,
         }
@@ -411,6 +431,12 @@ impl Command {
             Command::FindNext => &["f3"],
             Command::FindPrev => &["shift+f3"],
             Command::Reload => &["ctrl+shift+r"],
+            // `alt+d` rather than `ctrl+shift+d`, which duplicates a line.
+            Command::CompareWith => &["alt+d"],
+            // `[` and `]` step through changes, but only while the diff view is
+            // open: bound here they would stop being characters you can type.
+            Command::DiffNextChange => &[],
+            Command::DiffPrevChange => &[],
             Command::DuplicateLine => &["ctrl+shift+d"],
             Command::DeleteLine => &["ctrl+shift+k"],
             Command::MoveLineUp => &["alt+up"],
@@ -455,6 +481,9 @@ impl Command {
                 | Command::Quit
                 | Command::QuitAll
                 | Command::CommandPalette
+                | Command::CloseDiff
+                | Command::DiffNextChange
+                | Command::DiffPrevChange
                 | Command::Help
                 | Command::SplitPane
                 | Command::ClosePane
@@ -493,7 +522,7 @@ mod tests {
     fn all_variants_are_listed() {
         // Guards against forgetting to add a new variant to `ALL`, which would
         // make it invisible to the palette and the keymap builder.
-        assert_eq!(Command::ALL.len(), 60);
+        assert_eq!(Command::ALL.len(), 64);
     }
 
     #[test]

@@ -240,6 +240,22 @@ impl App {
     /// Panes showing it move to its neighbour — the buffer before it, or the
     /// first one — and every later index shifts down to match the list.
     pub fn after_buffer_removed(&mut self, removed: usize) {
+        // The diff view holds buffer indices, so it has to be told as well:
+        // closing one of the two documents it compares closes the view, since
+        // a comparison against a buffer that no longer exists has nothing to
+        // draw.
+        if let Some(view) = &mut self.diff {
+            if view.left == removed || view.right == removed {
+                self.diff = None;
+            } else {
+                if view.left > removed {
+                    view.left -= 1;
+                }
+                if view.right > removed {
+                    view.right -= 1;
+                }
+            }
+        }
         let last = self.buffers.len().saturating_sub(1);
         let fallback = removed.saturating_sub(1).min(last);
         for pane in &mut self.panes {

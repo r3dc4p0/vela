@@ -64,6 +64,20 @@ pub trait TextStorage: Debug + Send {
     /// literal patterns.
     fn find_literal(&self, needle: &str, case_sensitive: bool, limit: usize) -> Vec<usize>;
 
+    /// A 128-bit fingerprint of `line`, excluding its line break.
+    ///
+    /// The diff engine compares fingerprints instead of text, so the cost of a
+    /// comparison is one integer rather than a string walk — and this method is
+    /// where the allocation goes away: an implementation can hash the line in
+    /// place, which is the difference between one allocation per line and none
+    /// on a file with a million of them.
+    ///
+    /// 128 bits rather than 64 because a collision would silently make two
+    /// different lines compare equal, and a wrong diff is worse than a slow
+    /// one. At 128 bits the probability is not a risk worth a verification
+    /// pass.
+    fn line_hash(&self, line: usize) -> u128;
+
     /// A cheap, independent snapshot for background work.
     ///
     /// Returns `None` when the backend cannot produce one; callers then fall
@@ -196,6 +210,44 @@ impl TextStorage for RopeStorage {
         } else {
             len
         }
+    }
+
+    fn line_hash(&self, line: usize) -> u128 {
+        if line >= self.rope.len_lines() {
+            return 0;
+        }
+        let slice = self.rope.line(line);
+        // The line break is not part of the line: `abc\n` and a final `abc`
+        // without one are the same text, and a diff that called them different
+        // would put a change marker on the last line of every file that ends
+        // with a newline.
+        let total = slice.len_bytes();
+        let mut tail = 0usize;
+        if total > 0 && slice.byte(total - 1) == b'\n' {
+            tail += 1;
+            if total > 1 && slice.byte(total - 2) == b'\r' {
+                tail += 1;
+            }
+        }
+        let mut remaining = total - tail;
+
+        // FNV-1a and a rotate/multiply mix, so a collision has to fool two
+        // different functions at once.
+        let mut a: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut b: u64 = 0x9e37_79b9_7f4a_7c15;
+        for chunk in slice.chunks() {
+            let bytes = chunk.as_bytes();
+            let take = remaining.min(bytes.len());
+            for &byte in &bytes[..take] {
+                a = (a ^ byte as u64).wrapping_mul(0x0000_0100_0000_01b3);
+                b = b.rotate_left(5) ^ (byte as u64).wrapping_mul(0x517c_c1b7_2722_0a95);
+            }
+            remaining -= take;
+            if remaining == 0 {
+                break;
+            }
+        }
+        ((a as u128) << 64) | b as u128
     }
 
     fn line_start(&self, line: usize) -> usize {

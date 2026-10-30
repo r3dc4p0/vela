@@ -6,6 +6,7 @@
 //! pure view state.
 
 pub mod chrome;
+pub mod diff;
 pub mod editor;
 pub mod input;
 pub mod loading;
@@ -56,6 +57,11 @@ impl Message {
 pub enum PaletteMode {
     Commands,
     Files,
+    /// Pick a file to compare with the buffer in front of you.
+    ///
+    /// The same picker as `Files`, because "which file" is the same question;
+    /// only what happens to the answer differs.
+    Compare,
 }
 
 /// What selecting a palette entry does.
@@ -63,6 +69,7 @@ pub enum PaletteMode {
 pub enum PaletteAction {
     Run(Command),
     OpenFile(std::path::PathBuf),
+    CompareFile(std::path::PathBuf),
 }
 
 /// One row in the palette.
@@ -282,6 +289,8 @@ impl UiState {
 /// Compute the row rectangles for the whole window.
 struct Layout {
     topbar: Option<Rect>,
+    /// The whole editing area, panes and dividers together.
+    editor: Rect,
     tabs: Option<Rect>,
     /// One rect per pane, in pane order. Always `app.pane_count()` long, so an
     /// index into it is an index into `app.panes`; a pane too narrow to show
@@ -386,6 +395,7 @@ fn layout(area: Rect, app: &App) -> Layout {
 
     Layout {
         topbar,
+        editor,
         tabs: tabs_rect,
         panes,
         status: status_rect,
@@ -429,16 +439,23 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // of the two, because that is where motions and the wheel put the scroll.
     // The other panes are the opposite — their document may be showing another
     // pane's position, or another buffer's — so they hand theirs over first.
-    let active = app.active_pane.min(l.panes.len().saturating_sub(1));
-    if !l.panes.is_empty() {
-        draw_pane(frame, l.panes[active], app, active, false);
-    }
-    for pane in 0..l.panes.len() {
-        if pane != active {
-            draw_pane(frame, l.panes[pane], app, pane, true);
+    if app.diff.is_some() {
+        // A comparison takes the whole editing area: two columns inside one
+        // view, not two panes, because the columns share a scroll offset and a
+        // pane owns its own.
+        diff::draw(frame.buffer_mut(), l.editor, app);
+    } else {
+        let active = app.active_pane.min(l.panes.len().saturating_sub(1));
+        if !l.panes.is_empty() {
+            draw_pane(frame, l.panes[active], app, active, false);
         }
+        for pane in 0..l.panes.len() {
+            if pane != active {
+                draw_pane(frame, l.panes[pane], app, pane, true);
+            }
+        }
+        chrome::draw_pane_dividers(frame.buffer_mut(), &l.panes, app);
     }
-    chrome::draw_pane_dividers(frame.buffer_mut(), &l.panes, app);
     // Leave the active pane's viewport installed in its document: everything
     // after the draw — the status bar, the next keystroke — reads it from
     // there.
