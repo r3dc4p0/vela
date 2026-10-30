@@ -113,6 +113,7 @@ section.
 | Wheel up / down | Scroll three lines |
 | Wheel left / right | Scroll four columns (terminals that report it) |
 | Click a tab | Switch to that buffer |
+| Click a hint in the bottom bar | Run it — the bar is a row of buttons |
 
 The wheel moves the view, never the cursor: it can travel the whole buffer and
 leaves the caret where it was, even off screen. While the caret is out of view
@@ -122,6 +123,13 @@ back to the caret and drops the indicator.
 
 Scrolling stops where the text does: vertically at the last full page, and
 horizontally once the longest line ends.
+
+The shortcut bar along the bottom is clickable: pointing at a hint lifts it onto
+a button background, and clicking runs the command it names. It is a second way
+to reach the five things you do most — save, find, open, the command palette and
+the help screen — for a trackpad, a touchscreen or anyone who has not learned
+the keys yet. The bar only shows buttons for the mode it is in: while a palette
+or a prompt is open the hints describe keys, and there is nothing to press.
 
 ## Navigation
 

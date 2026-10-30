@@ -73,6 +73,11 @@ Typing, deleting, indenting and newlines apply to every caret as a single undo
 step, and `Esc` collapses back to one. Occurrences are matched literally, so a
 selection of `he` also finds the `he` inside `hello`.
 
+**Buttons** — the shortcut bar along the bottom is clickable: point at a hint
+and it lifts onto a button background, click it and the command runs. It is a
+second way to reach save, find, open, the command palette and help, for a
+trackpad or for anyone who has not learned the keys yet.
+
 **Mouse** — click to place the cursor, drag to select (autoscrolling above and
 below the text), double-click for a word and triple-click for a line, and click
 a tab to switch buffers. The wheel scrolls the view rather than the cursor, so

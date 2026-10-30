@@ -571,11 +571,71 @@ pub fn draw_status(buf: &mut Buffer, area: Rect, app: &App) {
 
 /// Contextual shortcut hints. These follow the current mode so the bar always
 /// teaches the next useful key instead of dumping the whole keymap.
-pub fn draw_hints(buf: &mut Buffer, area: Rect, app: &App) {
+/// One shortcut in the hint bar.
+///
+/// `command` is what a click on it runs; the two hints that describe a gesture
+/// rather than an action (scrolling the diff view) have none, and are not
+/// clickable.
+struct Hint {
+    key: String,
+    label: &'static str,
+    command: Option<Command>,
+}
+
+/// What separates two hints.
+const HINT_SEPARATOR: &str = "   ·   ";
+
+/// The hints for the current mode.
+fn hint_list(app: &App) -> Vec<Hint> {
+    let km = &app.keymap;
+    // A hint's key is not always its command's binding: `Esc` closes the diff
+    // view, but it is read by the view itself rather than bound in the keymap,
+    // so the label has to be given rather than looked up.
+    let bound = |command: Command, label: &'static str| Hint {
+        key: km.label_for(command),
+        label,
+        command: Some(command),
+    };
+    let raw = |key: &str, label: &'static str, command: Option<Command>| Hint {
+        key: key.to_string(),
+        label,
+        command,
+    };
+
+    // A comparison is a view, not an overlay, so it gets its own line rather
+    // than being folded into the overlay match below.
+    let hints = if app.diff.is_some() && app.ui.overlay.is_none() {
+        vec![
+            raw("↑↓", "scroll", None),
+            raw("] [", "change", None),
+            raw("Esc", "close", Some(Command::CloseDiff)),
+        ]
+    } else {
+        match app.ui.overlay.kind() {
+            OverlayKind::None => vec![
+                bound(Command::Save, "save"),
+                bound(Command::Find, "find"),
+                bound(Command::QuickOpen, "open"),
+                bound(Command::CommandPalette, "commands"),
+                bound(Command::Help, "help"),
+            ],
+            OverlayKind::Palette => vec![
+                raw("↑↓", "select", None),
+                raw("Enter", "run", None),
+                raw("Esc", "cancel", None),
+            ],
+            _ => vec![raw("Esc", "cancel", None)],
+        }
+    };
+    // A command with no binding has nothing to teach and nothing to show.
+    hints.into_iter().filter(|h| !h.key.is_empty()).collect()
+}
+
+pub fn draw_hints(buf: &mut Buffer, area: Rect, app: &mut App) {
     if area.height == 0 {
         return;
     }
-    let theme = &app.theme;
+    let theme = app.theme.clone();
     let deco = Deco::for_app(app);
     fill(
         buf,
@@ -583,75 +643,118 @@ pub fn draw_hints(buf: &mut Buffer, area: Rect, app: &App) {
         Style::default().bg(theme.hint_bg).fg(theme.hint_fg),
     );
 
-    let km = &app.keymap;
-    // A comparison is a view, not an overlay, so it gets its own line rather
-    // than being folded into the overlay match below.
-    let pairs: Vec<(String, &str)> = if app.diff.is_some() && app.ui.overlay.is_none() {
-        vec![
-            ("↑↓".to_string(), "scroll"),
-            ("] [".to_string(), "change"),
-            ("Esc".to_string(), "close"),
-        ]
-    } else {
-        match app.ui.overlay.kind() {
-            OverlayKind::None => vec![
-                (km.label_for(Command::Save), "save"),
-                (km.label_for(Command::Find), "find"),
-                (km.label_for(Command::QuickOpen), "open"),
-                (km.label_for(Command::CommandPalette), "commands"),
-                (km.label_for(Command::Help), "help"),
-            ],
-            OverlayKind::Palette => vec![
-                ("↑↓".into(), "select"),
-                ("Enter".into(), "run"),
-                ("Esc".into(), "cancel"),
-            ],
-            _ => vec![("Esc".into(), "cancel")],
+    let hints = hint_list(app);
+    let hovered = app.ui.hovered_hint;
+    let paint = HintPaint {
+        theme: &theme,
+        row: area.y,
+        right: area.x + area.width,
+        two_tone: deco.two_tone_hints,
+    };
+    let right = paint.right;
+
+    let mut hits: Vec<crate::ui::HintHit> = Vec::new();
+    let mut x = area.x + 1;
+    for (index, hint) in hints.iter().enumerate() {
+        if index > 0 {
+            let shown = fit(HINT_SEPARATOR, right.saturating_sub(x) as usize);
+            buf.set_string(
+                x,
+                area.y,
+                &shown,
+                Style::default().fg(theme.dim).bg(theme.hint_bg),
+            );
+            x += shown.chars().count() as u16;
         }
+        if x >= right {
+            break;
+        }
+        // The hover index counts the *clickable* hints, which is the same list
+        // the mouse handler searches.
+        let is_hovered = hovered == Some(hits.len());
+        let width = paint_hint(buf, x, &paint, hint, is_hovered);
+        if let Some(command) = hint.command {
+            hits.push(crate::ui::HintHit {
+                row: area.y,
+                start: x,
+                end: (x + width).min(right),
+                command,
+            });
+        }
+        x += width;
+    }
+
+    app.ui.hint_hits = hits;
+}
+
+/// Where a hint is being painted, and in which style.
+struct HintPaint<'a> {
+    theme: &'a Theme,
+    row: u16,
+    /// First column past the bar.
+    right: u16,
+    /// Keys and labels in two colours, or the block style's single colour.
+    two_tone: bool,
+}
+
+/// Paint one hint, returning how many columns it took.
+///
+/// The key is the thing to press and the label only says what it does, so the
+/// key keeps the brighter colour and the label drops back — except when the
+/// pointer is over it, where the whole hint lifts onto a button background and
+/// both parts brighten, because that is what "you can press this" looks like.
+fn paint_hint(buf: &mut Buffer, x: u16, paint: &HintPaint<'_>, hint: &Hint, hovered: bool) -> u16 {
+    let HintPaint {
+        theme,
+        row: y,
+        right,
+        two_tone,
+    } = *paint;
+    let avail = right.saturating_sub(x) as usize;
+    if avail == 0 {
+        return 0;
+    }
+    let bg = if hovered {
+        theme.pill_bg
+    } else {
+        theme.hint_bg
+    };
+    let key_fg = if hovered {
+        theme.overlay_sel_fg
+    } else {
+        theme.hint_fg
+    };
+    let label_fg = if hovered || !two_tone {
+        theme.hint_fg
+    } else {
+        theme.dim
     };
 
-    if !deco.two_tone_hints {
-        let mut spans: Vec<String> = Vec::new();
-        for (key, label) in pairs {
-            if key.is_empty() {
-                continue;
-            }
-            spans.push(format!("{key} {label}"));
+    let text = format!("{} {}", hint.key, hint.label);
+    let chars: Vec<char> = text.chars().collect();
+    let key_len = hint.key.chars().count();
+    let mut painted = 0u16;
+    for (i, c) in chars.iter().enumerate() {
+        let remaining = right - (x + painted);
+        if remaining == 0 {
+            break;
         }
-        let text = format!(" {} ", spans.join("   ·   "));
-        buf.set_string(
-            area.x,
-            area.y,
-            fit(&text, area.width as usize),
-            Style::default().fg(theme.hint_fg),
-        );
-        return;
+        if remaining == 1 && i + 1 < chars.len() {
+            // The same rule `fit` uses: one column left means an ellipsis, not
+            // half a word.
+            buf[(x + painted, y)]
+                .set_char('…')
+                .set_style(Style::default().fg(theme.dim).bg(bg));
+            painted += 1;
+            break;
+        }
+        let fg = if i < key_len { key_fg } else { label_fg };
+        buf[(x + painted, y)]
+            .set_char(*c)
+            .set_style(Style::default().fg(fg).bg(bg));
+        painted += 1;
     }
-
-    // The key is the thing to press and the label only says what it does, so
-    // the key keeps the brighter colour and the label drops back.
-    let mut segments: Vec<(String, Color)> = vec![(" ".to_string(), theme.hint_fg)];
-    let mut first = true;
-    for (key, label) in pairs {
-        if key.is_empty() {
-            continue;
-        }
-        if !first {
-            segments.push(("   ·   ".to_string(), theme.dim));
-        }
-        first = false;
-        segments.push((key, theme.hint_fg));
-        segments.push((format!(" {label}"), theme.dim));
-    }
-    segments.push((" ".to_string(), theme.hint_fg));
-    paint_segments(
-        buf,
-        area.x,
-        area.y,
-        area.x + area.width,
-        theme.hint_bg,
-        &segments,
-    );
+    painted
 }
 
 /// Transient notifications, stacked above the hints bar.

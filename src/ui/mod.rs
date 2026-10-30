@@ -246,6 +246,29 @@ impl Overlay {
     }
 }
 
+/// A clickable stretch of the hint bar.
+///
+/// The bar is drawn as a row of shortcuts, and each one is a button: the draw
+/// pass publishes where it put them, and the mouse handler looks the click up
+/// here. Publishing from the draw pass rather than computing the layout twice
+/// is the same rule the tab strip and the panes follow — one layout, one source
+/// of truth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HintHit {
+    pub row: u16,
+    /// First column, inclusive.
+    pub start: u16,
+    /// Last column, exclusive.
+    pub end: u16,
+    pub command: Command,
+}
+
+impl HintHit {
+    pub fn contains(&self, column: u16, row: u16) -> bool {
+        row == self.row && column >= self.start && column < self.end
+    }
+}
+
 /// All presentation state.
 #[derive(Debug)]
 pub struct UiState {
@@ -253,6 +276,13 @@ pub struct UiState {
     pub messages: Vec<Message>,
     /// Last message shown in the status bar (kept after the toast expires).
     pub status: Option<Message>,
+    /// Where the hint bar's buttons ended up in the last frame.
+    ///
+    /// Empty when the bar is hidden, so a click on the row it would have
+    /// occupied cannot press a button that is not there.
+    pub hint_hits: Vec<HintHit>,
+    /// The hint under the pointer, so the bar reads as something pressable.
+    pub hovered_hint: Option<usize>,
 }
 
 impl Default for UiState {
@@ -261,6 +291,8 @@ impl Default for UiState {
             overlay: Overlay::None,
             messages: Vec::new(),
             status: None,
+            hint_hits: Vec::new(),
+            hovered_hint: None,
         }
     }
 }
@@ -466,6 +498,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
     if let Some(r) = l.hints {
         chrome::draw_hints(frame.buffer_mut(), r, app);
+    } else {
+        // No bar, no buttons: a stale hit list would make the row it used to
+        // occupy press something invisible.
+        app.ui.hint_hits.clear();
+        app.ui.hovered_hint = None;
     }
 
     let span = app.editor_span();

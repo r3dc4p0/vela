@@ -540,8 +540,24 @@ impl App {
     fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
         use crossterm::event::{MouseButton, MouseEventKind};
         if !self.config.ui.mouse || self.ui.overlay.captures_input() {
+            // Nothing here takes the pointer, so drop any highlight: a button
+            // left lit under a pointer that has moved on is a lie.
+            self.ui.hovered_hint = None;
             return;
         }
+        // The hint bar is handled before the match, not as an arm of it: it is
+        // chrome that sits below everything, and the diff view's catch-all arm
+        // below would otherwise swallow the click before it was looked at.
+        if matches!(mouse.kind, MouseEventKind::Moved) {
+            self.hover_hint(mouse.column, mouse.row);
+            return;
+        }
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+            && self.click_hint(mouse.column, mouse.row)
+        {
+            return;
+        }
+
         match mouse.kind {
             // The diff view covers the whole editing area and has one scroll
             // offset, so the pointer's column is irrelevant there.
@@ -574,6 +590,34 @@ impl App {
             MouseEventKind::Up(MouseButton::Left) => self.drag_anchor = None,
             _ => {}
         }
+    }
+
+    /// Run the hint under a click, if there is one.
+    ///
+    /// Returns true when the click was a button press, so the caller does not
+    /// go on to map the same point into a document — the bar is the bottom row
+    /// of the screen, and a click there is never also a click on the text.
+    fn click_hint(&mut self, column: u16, row: u16) -> bool {
+        let Some(hit) = self
+            .ui
+            .hint_hits
+            .iter()
+            .find(|h| h.contains(column, row))
+            .copied()
+        else {
+            return false;
+        };
+        self.execute(hit.command);
+        true
+    }
+
+    /// Track which hint the pointer is over, so the bar can light it up.
+    fn hover_hint(&mut self, column: u16, row: u16) {
+        self.ui.hovered_hint = self
+            .ui
+            .hint_hits
+            .iter()
+            .position(|h| h.contains(column, row));
     }
 
     /// Columns the line-number gutter occupies, which the renderer and every

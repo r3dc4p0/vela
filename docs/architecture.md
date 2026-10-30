@@ -296,6 +296,15 @@ So `ui::draw` publishes the editor and tab rects back into `App`, and
 `chrome::tab_spans` function that both the painter and the hit-test consume, so
 a tab can never be clickable somewhere it was not drawn.
 
+The hint bar follows the same rule, and it needed to: its buttons are laid out
+by the painter, one segment at a time, and the click has to land on the same
+columns. `chrome::draw_hints` returns `HintHit`s — row, column range, command —
+which `App::ui.hint_hits` holds until the next frame, so there is one layout and
+the mouse handler reads it rather than recomputing it. A hint whose key is not
+the command's binding (`Esc` closes the diff view but is read by the view, not
+bound in the keymap) carries its key explicitly, because deriving every label
+from the keymap silently dropped that hint.
+
 Two position mappings exist on purpose: `buffer_position_at` is strict and
 returns nothing for a click in the gutter, while `drag_position_at` clamps, so a
 drag that runs off the edge of the text keeps extending to the nearest line
@@ -628,6 +637,7 @@ would dominate the startup budget.
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Indent guides | `tests/indent_guides.rs`: the rule runs from a block's first line to its last and stops at the closing brace, a blank line inside keeps it and a blank line after does not, a nested block gets its own, the spacing follows the file's indent width, the toggle and its key work, a flat file has none, and a rule never lands on a character |
 | Diff | `src/diff.rs`: identical files, an inserted, deleted and rewritten line, a rewritten block (paired rows, not all-removals-then-all-additions), an empty side, nothing in common, duplicated lines with no anchor, a large file with one edit, a block inserted in the middle, and a missing final newline not counting as a change. `tests/diff.rs`: both files side by side, the tint on each side, the gap a one-sided row leaves, columns staying aligned across an insertion, one scroll offset moving both, opening on the first change, `]`/`[` stepping through blocks (and through a tall one), the scroll keys stopping at the ends, `Esc` closing, typing not editing, a buffer compared with itself refused, comparing with an open file and with one that has to be opened, closing a compared file closing the view, and the wheel scrolling |
+| Hint bar | `tests/hints.rs`: clicking save saves, commands opens the palette, open opens the picker, find opens the find bar, help opens help, and close closes the diff view; a click on the empty part of the bar does nothing; the caret does not move; the pointer lights the hint under it and the light goes out when it leaves; a hidden bar has no buttons, including after being hidden at runtime; a narrow bar's hits stay inside the screen; and nothing is pressable while a palette is up |
 | Features | `tests/features.rs`: reload (and the confirmation that guards it), recents, session restore, binary refusal, a key override, quick open, trim, regex backreferences, whole-word, UTF-16 and CR round trips, the display toggles, a colour override and the document statistics |
 | Indentation | `tests/indent.rs`: a two-space file indents by two and a tab file by a tab, the file beats the settings, a new buffer uses them, `detect_indent = false` turns it off, a file with no indentation falls back, the status bar names the style, Enter and the pair expansion use the file's width, dedent removes one of its levels, two buffers in one session keep their own styles, and the `Ctrl+Shift+I` menu opens on the current style, offers tabs and the three common widths, sends "Other width…" to the width prompt, refuses a bad width without closing, and cancels on Esc |
 | Typing | `tests/autopair.rs`: every bracket pairs with the caret inside, a closer is stepped over rather than doubled, a selection is surrounded and stays selected (so it can be surrounded again), backspace removes an empty pair whole, Enter opens a bracket pair onto three lines (and does not touch a quote), quotes stay punctuation after a word or `&`, a paste is never completed, one undo removes a pair, `Ctrl+Shift+A` turns the rules off and on, and each of these holds at every caret |
