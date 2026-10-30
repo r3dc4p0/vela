@@ -12,7 +12,7 @@ loses your work.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ VIBE · src/buffer/mod.rs ●                        2 buffers   v0.7.0 │
+│ VIBE · src/buffer/mod.rs ●                        2 buffers   v0.8.0 │
 │ ▏ storage.rs ▏ mod.rs ●                                              │
 │  1 ▏ use std::ops::Range;                                            │
 │  2 ▏                                                                 │
