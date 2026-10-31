@@ -73,12 +73,50 @@ pub enum PaletteAction {
 }
 
 /// One row in the palette.
-#[derive(Debug, Clone)]
-pub struct PaletteItem {
-    pub label: String,
-    pub detail: String,
-    pub positions: Vec<usize>,
-    pub action: PaletteAction,
+///
+/// A group heading is a row of its own rather than a flag on an entry, so the
+/// type says what the code means: a heading has no action, and nothing can run
+/// one by accident.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaletteItem {
+    /// Something to run or open.
+    Entry {
+        label: String,
+        detail: String,
+        positions: Vec<usize>,
+        action: PaletteAction,
+    },
+    /// A separator with a group's name in the middle of it.
+    Group(String),
+}
+
+impl PaletteItem {
+    pub fn entry(
+        label: impl Into<String>,
+        detail: impl Into<String>,
+        positions: Vec<usize>,
+        action: PaletteAction,
+    ) -> Self {
+        PaletteItem::Entry {
+            label: label.into(),
+            detail: detail.into(),
+            positions,
+            action,
+        }
+    }
+
+    /// True for a heading, which is drawn but never selected.
+    pub fn is_group(&self) -> bool {
+        matches!(self, PaletteItem::Group(_))
+    }
+
+    /// What selecting this row runs.
+    pub fn action(&self) -> Option<&PaletteAction> {
+        match self {
+            PaletteItem::Entry { action, .. } => Some(action),
+            PaletteItem::Group(_) => None,
+        }
+    }
 }
 
 /// Command palette / file finder state.
@@ -92,6 +130,49 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Put the selection on the first row that can be chosen.
+    ///
+    /// A list that starts with a heading would otherwise open with a separator
+    /// highlighted, which cannot be run and looks like a bug.
+    pub fn select_first_entry(&mut self) {
+        self.selected = self
+            .items
+            .iter()
+            .position(|item| !item.is_group())
+            .unwrap_or(0);
+        self.scroll = 0;
+    }
+
+    /// Move the selection by `delta` rows, stepping over headings.
+    pub fn step(&mut self, delta: isize) {
+        if self.items.is_empty() {
+            return;
+        }
+        let mut at = self.selected as isize;
+        loop {
+            at += delta;
+            if at < 0 || at as usize >= self.items.len() {
+                return;
+            }
+            if !self.items[at as usize].is_group() {
+                self.selected = at as usize;
+                return;
+            }
+        }
+    }
+
+    /// Rows that can be chosen, and how many there are.
+    pub fn entry_position(&self) -> (usize, usize) {
+        let total = self.items.iter().filter(|i| !i.is_group()).count();
+        let here = self
+            .items
+            .iter()
+            .take(self.selected + 1)
+            .filter(|i| !i.is_group())
+            .count();
+        (here, total)
+    }
+
     pub fn new(mode: PaletteMode) -> Self {
         Self {
             mode,

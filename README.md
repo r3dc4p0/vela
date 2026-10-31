@@ -143,7 +143,9 @@ so every match is reachable — including in files too large to scan per
 keystroke.
 
 **Navigation** — go to line/column, fuzzy file finder (`Ctrl+P`), command
-palette (`Ctrl+Shift+P`), help screen generated from the live keymap.
+palette (`Ctrl+Shift+P`) grouped into sections by category — the arrows step over
+the separators, and typing flattens the list so the ranking is not broken up —
+and a help screen generated from the live keymap.
 
 **Interface** — line-number gutter (absolute or relative), syntax highlighting
 for 17 languages, dark and light themes, visible whitespace, indent guides,

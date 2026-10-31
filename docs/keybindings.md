@@ -154,12 +154,23 @@ or a prompt is open the hints describe keys, and there is nothing to press.
 | `Alt+Enter` | — | Replace all |
 | `Esc` | — | Close the bar, keeping the search active |
 
+### The command palette
+
+`Ctrl+Shift+P` opens the menu of every command, divided into sections — File,
+Edit, Navigate, Search, View, Help — with the name of each in the middle of a
+separator. The arrows step from command to command and skip the separators,
+which are labels rather than choices; the footer counts commands, not headings.
+
+Type to search and the sections go away: a search ranks by how well the name
+matches, and a list in match order has no runs to group. Clearing the query
+brings them back.
+
 ## View and help
 
 | Key | Command id | Action |
 | --- | --- | --- |
 | `F1` | `help.show` | Help screen, generated from the live keymap |
-| `Ctrl+Shift+P` | `help.commandPalette` | Command palette |
+| `Ctrl+Shift+P` | `help.commandPalette` | Command palette, grouped into sections by category |
 | `Ctrl+Shift+T` | `view.toggleTheme` | Dark / light |
 | `Ctrl+Shift+U` | `view.toggleUiStyle` | Hairline chrome / block chrome |
 | `Ctrl+Shift+G` | `view.toggleIndentGuides` | Rule between indentation blocks on / off |

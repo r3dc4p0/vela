@@ -9,7 +9,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::Frame;
 
-use super::{App, Confirm, Overlay, Palette, PaletteMode, PathPrompt};
+use super::{App, Confirm, Overlay, Palette, PaletteItem, PaletteMode, PathPrompt};
 use crate::commands::{Category, Command};
 use crate::keymap::KeyChord;
 use crate::theme::Theme;
@@ -86,6 +86,37 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Option<(u16, u16)> {
     result
 }
 
+/// A separator with a group's name in the middle of it.
+///
+/// The rule runs the full width and the name is painted over it, which is the
+/// only way to have the label *in* the line rather than above it: a whole-cell
+/// `─` sits in the middle of the row, so the text interrupts it exactly where
+/// the eye expects a section title.
+fn draw_group(buf: &mut Buffer, rect: Rect, name: &str, theme: &Theme) {
+    // `border`, not `line`: a separator has to be seen, and `line` is the shade
+    // for a seam between two surfaces, which this is not. The same lesson the
+    // indent guides taught — a rule the colour of its background is not a rule.
+    let rule = Style::default().bg(theme.overlay_bg).fg(theme.border);
+    buf.set_style(rect, rule);
+    buf.set_string(rect.x, rect.y, "─".repeat(rect.width as usize), rule);
+
+    let label = format!(" {name} ");
+    let width = label.chars().count() as u16;
+    if width >= rect.width {
+        return;
+    }
+    let x = rect.x + (rect.width - width) / 2;
+    buf.set_string(
+        x,
+        rect.y,
+        &label,
+        Style::default()
+            .bg(theme.overlay_bg)
+            .fg(theme.overlay_title)
+            .add_modifier(Modifier::BOLD),
+    );
+}
+
 fn draw_palette(
     buf: &mut Buffer,
     area: Rect,
@@ -152,58 +183,71 @@ fn draw_palette(
             break;
         }
         let y = list_top + row as u16;
-        let is_sel = idx == palette.selected;
-        let style = if is_sel {
-            Style::default()
-                .bg(theme.overlay_sel_bg)
-                .fg(theme.overlay_sel_fg)
-        } else {
-            Style::default().bg(theme.overlay_bg).fg(theme.fg)
-        };
-        buf.set_style(Rect::new(inner.x, y, inner.width, 1), style);
+        let row_rect = Rect::new(inner.x, y, inner.width, 1);
+        match &palette.items[idx] {
+            PaletteItem::Group(name) => draw_group(buf, row_rect, name, theme),
+            PaletteItem::Entry {
+                label,
+                detail,
+                positions,
+                ..
+            } => {
+                let is_sel = idx == palette.selected;
+                let style = if is_sel {
+                    Style::default()
+                        .bg(theme.overlay_sel_bg)
+                        .fg(theme.overlay_sel_fg)
+                } else {
+                    Style::default().bg(theme.overlay_bg).fg(theme.fg)
+                };
+                buf.set_style(row_rect, style);
 
-        let item = &palette.items[idx];
-        let w = inner.width as usize;
-        let detail_w = item.detail.chars().count() + 1;
-        let label_w = w.saturating_sub(detail_w + 1);
-        let shown = fit(&item.label, label_w);
-        buf.set_string(inner.x, y, &shown, style);
-        if !item.detail.is_empty() && detail_w < w {
-            buf.set_string(
-                inner.x + (w - detail_w) as u16,
-                y,
-                fit(&item.detail, detail_w),
-                if is_sel {
-                    style
-                } else {
-                    Style::default().bg(theme.overlay_bg).fg(theme.dim)
-                },
-            );
-        }
-        // Highlight matched characters.
-        for &pos in &item.positions {
-            if pos >= shown.chars().count() {
-                break;
+                let w = inner.width as usize;
+                let detail_w = detail.chars().count() + 1;
+                let label_w = w.saturating_sub(detail_w + 1);
+                let shown = fit(label, label_w);
+                buf.set_string(inner.x, y, &shown, style);
+                if !detail.is_empty() && detail_w < w {
+                    buf.set_string(
+                        inner.x + (w - detail_w) as u16,
+                        y,
+                        fit(detail, detail_w),
+                        if is_sel {
+                            style
+                        } else {
+                            Style::default().bg(theme.overlay_bg).fg(theme.dim)
+                        },
+                    );
+                }
+                // Highlight matched characters.
+                for &pos in positions {
+                    if pos >= shown.chars().count() {
+                        break;
+                    }
+                    let x = inner.x + pos as u16;
+                    if x >= inner.x + inner.width {
+                        break;
+                    }
+                    let ch = shown.chars().nth(pos).unwrap_or(' ');
+                    let hl = Style::default()
+                        .bg(if is_sel {
+                            theme.overlay_sel_bg
+                        } else {
+                            theme.overlay_bg
+                        })
+                        .fg(theme.overlay_title)
+                        .add_modifier(Modifier::BOLD);
+                    buf[(x, y)].set_symbol(&ch.to_string()).set_style(hl);
+                }
             }
-            let x = inner.x + pos as u16;
-            if x >= inner.x + inner.width {
-                break;
-            }
-            let ch = shown.chars().nth(pos).unwrap_or(' ');
-            let hl = Style::default()
-                .bg(if is_sel {
-                    theme.overlay_sel_bg
-                } else {
-                    theme.overlay_bg
-                })
-                .fg(theme.overlay_title)
-                .add_modifier(Modifier::BOLD);
-            buf[(x, y)].set_symbol(&ch.to_string()).set_style(hl);
         }
     }
 
-    // Footer count.
-    let footer = format!(" {}/{} ", palette.selected + 1, palette.items.len());
+    // Footer count. Headings are not choices, so they are not counted: "12/64"
+    // is the position among commands, which is what the reader is keeping
+    // track of.
+    let (here, total) = palette.entry_position();
+    let footer = format!(" {here}/{total} ");
     let y = inner.y + inner.height - 1;
     let fw = footer.chars().count() as u16;
     if fw < inner.width {

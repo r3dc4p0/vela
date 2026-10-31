@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::App;
 use crate::buffer::Edit;
-use crate::commands::Command;
+use crate::commands::{Category, Command};
 use crate::fuzzy;
 use crate::indent::IndentStyle;
 use crate::search::{self, Query};
@@ -48,8 +48,7 @@ impl App {
         let items = self.items_for(mode, &query);
         if let Overlay::Palette(palette) = &mut self.ui.overlay {
             palette.items = items;
-            palette.selected = 0;
-            palette.scroll = 0;
+            palette.select_first_entry();
         }
     }
 
@@ -63,8 +62,7 @@ impl App {
     pub(crate) fn refresh_palette_in_place(&mut self, p: &mut Palette) {
         let query = p.input.value().to_string();
         p.items = self.items_for(p.mode, &query);
-        p.selected = 0;
-        p.scroll = 0;
+        p.select_first_entry();
     }
 
     fn items_for(&self, mode: PaletteMode, query: &str) -> Vec<PaletteItem> {
@@ -76,33 +74,59 @@ impl App {
     }
 
     fn command_items(&self, query: &str) -> Vec<PaletteItem> {
-        let mut scored: Vec<(i32, PaletteItem)> = Vec::new();
+        let mut scored: Vec<(i32, Category, PaletteItem)> = Vec::new();
         for cmd in Command::ALL.iter().copied() {
             let Some(m) = fuzzy::score(query, cmd.title()) else {
                 continue;
             };
             let keys = self.keymap.label_for(cmd);
-            let detail = if keys.is_empty() {
-                cmd.category().label().to_string()
-            } else {
+            // With sections on screen the category is already said above the
+            // row, so an unbound command has nothing to add there — only the
+            // flat, filtered list needs it to keep the groups visible.
+            let detail = if !keys.is_empty() {
                 keys
+            } else if query.trim().is_empty() {
+                String::new()
+            } else {
+                cmd.category().label().to_string()
             };
             scored.push((
                 m.score,
-                PaletteItem {
-                    label: cmd.title().to_string(),
-                    detail,
-                    positions: m.positions,
-                    action: PaletteAction::Run(cmd),
-                },
+                cmd.category(),
+                PaletteItem::entry(cmd.title(), detail, m.positions, PaletteAction::Run(cmd)),
             ));
         }
-        scored.sort_by_key(|a| std::cmp::Reverse(a.0));
-        scored
+        // Score first, then category. `Command::ALL` is declaration order, and
+        // commands added later sit wherever they were appended — `CompareWith`
+        // at the end of the file block, `SetIndentation` among the navigation
+        // ones — so grouping on that order alone would open a section, leave
+        // it, and open it again. Sorting by category makes each section one
+        // contiguous run, and the stable sort keeps the declared order inside
+        // it. The second key is inert while searching, because the scores
+        // differ.
+        scored.sort_by_key(|(score, category, _)| (std::cmp::Reverse(*score), *category));
+        let ranked: Vec<(Category, PaletteItem)> = scored
             .into_iter()
             .take(PALETTE_LIMIT)
-            .map(|(_, item)| item)
-            .collect()
+            .map(|(_, category, item)| (category, item))
+            .collect();
+
+        // Sections only while browsing. A search ranks by match, and a list in
+        // score order has no runs to group: a heading would break the ranking
+        // to introduce a section holding one row.
+        if !query.trim().is_empty() {
+            return ranked.into_iter().map(|(_, item)| item).collect();
+        }
+        let mut out: Vec<PaletteItem> = Vec::with_capacity(ranked.len() + 6);
+        let mut last: Option<Category> = None;
+        for (category, item) in ranked {
+            if last != Some(category) {
+                out.push(PaletteItem::Group(category.label().to_string()));
+                last = Some(category);
+            }
+            out.push(item);
+        }
+        out
     }
 
     fn file_items(&self, query: &str, compare: bool) -> Vec<PaletteItem> {
@@ -114,16 +138,16 @@ impl App {
             .map(|(idx, m)| {
                 let rel = index[idx].clone();
                 let full = self.cwd.join(&rel);
-                PaletteItem {
-                    label: rel,
-                    detail: String::new(),
-                    positions: m.positions,
-                    action: if compare {
+                PaletteItem::entry(
+                    rel,
+                    String::new(),
+                    m.positions,
+                    if compare {
                         PaletteAction::CompareFile(full)
                     } else {
                         PaletteAction::OpenFile(full)
                     },
-                }
+                )
             })
             .collect()
     }
@@ -674,38 +698,41 @@ fn palette_key(app: &mut App, p: &mut Palette, key: &KeyEvent) -> PaletteOutcome
     match key.code {
         KeyCode::Esc => return PaletteOutcome::Cancel,
         KeyCode::Enter => {
-            if let Some(item) = p.items.get(p.selected) {
-                return PaletteOutcome::Accept(item.action.clone());
+            if let Some(action) = p.items.get(p.selected).and_then(|item| item.action()) {
+                return PaletteOutcome::Accept(action.clone());
             }
-            // Nothing to run: keep the palette open so the query can be fixed.
+            // Nothing to run — a heading, or an empty list: keep the palette
+            // open so the query can be fixed.
             return PaletteOutcome::Open;
         }
+        // Every step goes through `Palette::step`, which walks over the group
+        // headings: the selection is only ever on something that can be run.
         KeyCode::Up => {
-            p.selected = p.selected.saturating_sub(1);
+            p.step(-1);
             return PaletteOutcome::Open;
         }
         KeyCode::Down => {
-            if p.selected + 1 < p.items.len() {
-                p.selected += 1;
-            }
+            p.step(1);
             return PaletteOutcome::Open;
         }
         KeyCode::PageUp => {
-            p.selected = p.selected.saturating_sub(10);
-            return PaletteOutcome::Open;
-        }
-        KeyCode::PageDown => {
-            p.selected = (p.selected + 10).min(p.items.len().saturating_sub(1));
-            return PaletteOutcome::Open;
-        }
-        KeyCode::Char('n') | KeyCode::Char('j') if ctrl => {
-            if p.selected + 1 < p.items.len() {
-                p.selected += 1;
+            for _ in 0..10 {
+                p.step(-1);
             }
             return PaletteOutcome::Open;
         }
+        KeyCode::PageDown => {
+            for _ in 0..10 {
+                p.step(1);
+            }
+            return PaletteOutcome::Open;
+        }
+        KeyCode::Char('n') | KeyCode::Char('j') if ctrl => {
+            p.step(1);
+            return PaletteOutcome::Open;
+        }
         KeyCode::Char('p') | KeyCode::Char('k') if ctrl => {
-            p.selected = p.selected.saturating_sub(1);
+            p.step(-1);
             return PaletteOutcome::Open;
         }
         KeyCode::Char('w') if ctrl => {

@@ -623,6 +623,35 @@ bindings, the palette and the help screen all resolve through it, so a new
 command automatically appears in the palette, in the help screen and can be
 rebound in the config. `docs/extending.md` shows the three-line recipe.
 
+### The command palette is a list with headings in it
+
+A section heading is a `PaletteItem::Group` — a row of its own, not a flag on an
+entry — so the type says what the code means: a heading has no action, and
+`PaletteItem::action()` returns `Option`, which is what stops Enter from running
+one. The selection walks the list with `Palette::step`, which skips headings;
+`select_first_entry` is what a rebuilt list starts on, or a palette would open
+with a separator highlighted.
+
+Two decisions worth stating:
+
+- **Sections only while browsing.** A search ranks by match score, and a list in
+  score order has no runs to group — inserting headings there would break the
+  ranking to introduce a section holding one row. The heading is not lost
+  information while searching: an unbound command shows its category in the
+  detail column, which is what the flat list needs.
+- **Sort by category, not by declaration order.** `Command::ALL` is declaration
+  order, and commands added later sit wherever they were appended —
+  `CompareWith` at the end of the file block, `SetIndentation` among the
+  navigation ones. Grouping on that order alone opened a section, left it, and
+  opened it again; the first render showed `File / View / Edit / Navigate /
+  Edit / …`. Sorting by category first makes each section one contiguous run,
+  and the stable sort keeps the declared order inside it.
+
+The heading itself is a rule with the name painted over it, in the panel's own
+`border` colour rather than the `line` shade: a separator the colour of its
+background is not a separator, which is the same lesson the indent guides
+taught. `tests/palette.rs` asserts the distance rather than trusting the eye.
+
 ### Overlays and the borrow checker
 
 Modal input needs `&mut App` and the overlay state at the same time. Rather than
@@ -669,6 +698,7 @@ would dominate the startup budget.
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Indent guides | `tests/indent_guides.rs`: the rule runs from a block's first line to its last and stops at the closing brace, a blank line inside keeps it and a blank line after does not, a nested block gets its own, the spacing follows the file's indent width, the toggle and its key work, a flat file has none, and a rule never lands on a character |
 | Diff | `src/diff.rs`: identical files, an inserted, deleted and rewritten line, a rewritten block (paired rows, not all-removals-then-all-additions), an empty side, nothing in common, duplicated lines with no anchor, a large file with one edit, a block inserted in the middle, and a missing final newline not counting as a change. `tests/diff.rs`: both files side by side, the tint on each side, the gap a one-sided row leaves, columns staying aligned across an insertion, one scroll offset moving both, opening on the first change, `]`/`[` stepping through blocks (and through a tall one), the scroll keys stopping at the ends, `Esc` closing, typing not editing, a buffer compared with itself refused, comparing with an open file and with one that has to be opened, closing a compared file closing the view, and the wheel scrolling |
+| Command palette | `tests/palette.rs`: the sections are one per category in the declared order and every command sits under its own, a heading is a rule with the name centred in it, the selection opens on a command rather than a heading, stepping walks over them (and never rests on one in 240 steps either way), Enter on a heading runs nothing, typing flattens the list and clearing brings the sections back, the footer counts commands rather than headings, the separator is drawn in the panel's border colour and is visible against it, and the file picker has no sections |
 | Clipboard | `src/clipboard.rs`: the internal buffer round-trips, terminal mode queues exactly one sequence and consumes it, system mode never asks the terminal, auto falls back to it, base64 against the known vectors (including a multi-byte character), a selection over the size limit is refused with a reason, and the mode parses from the setting. `tests/clipboard.rs`: `Ctrl+C` on a selection and on a bare line, `Ctrl+X` both ways, the message that says whether the text left, and the setting choosing the channel |
 | Hint bar | `tests/hints.rs`: clicking save saves, commands opens the palette, open opens the picker, find opens the find bar, help opens help, and close closes the diff view; a click on the empty part of the bar does nothing; the caret does not move; the pointer lights the hint under it and the light goes out when it leaves; a hidden bar has no buttons, including after being hidden at runtime; a narrow bar's hits stay inside the screen; and nothing is pressable while a palette is up |
 | Features | `tests/features.rs`: reload (and the confirmation that guards it), recents, session restore, binary refusal, a key override, quick open, trim, regex backreferences, whole-word, UTF-16 and CR round trips, the display toggles, a colour override and the document statistics |
