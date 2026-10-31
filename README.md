@@ -118,6 +118,22 @@ had. A clean exit discards the copy, because by then you have been asked. Big fi
 progress panel that counts the bytes actually read, so the window keeps painting
 while a two-gigabyte file loads.
 
+**Clipboard** — a copy leaves the editor: the OS pasteboard when there is one,
+and otherwise the terminal's own clipboard through OSC 52, which is the only
+route that reaches your machine over SSH, inside tmux or in a container. The
+editor keeps its own copy either way, so an in-editor paste still works when
+nothing outside will take the text — and the message says which happened rather
+than claiming a copy it did not make. `clipboard = "auto" | "system" |
+"terminal" | "internal"` in `[editor]` chooses the route.
+
+**Clipboard** — a copy leaves the editor: the OS pasteboard when there is one,
+and otherwise the terminal's own clipboard through OSC 52, which is the only
+route that reaches your machine over SSH, inside tmux or in a container. The
+editor keeps its own copy either way, so an in-editor paste still works when
+nothing outside will take the text — and the message says which happened rather
+than claiming a copy it did not make. `clipboard = "auto"`, `"system"`,
+`"terminal"` or `"internal"` in `[editor]` chooses the route.
+
 **Search** — incremental search with case, whole-word and regex toggles;
 find & replace including replace-all as a single undo step; match counter;
 `F3`/`Shift+F3` to repeat. `Ctrl+F` searches what you selected, verbatim — a

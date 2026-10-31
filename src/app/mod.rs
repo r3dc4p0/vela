@@ -24,10 +24,10 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Rect;
-use tracing::{debug, error as log_error, info};
+use tracing::{debug, error as log_error, info, warn as log_warn};
 
 use crate::buffer::{Caret, Document, Motion, MotionCtx};
-use crate::clipboard::Clipboard;
+use crate::clipboard::{Clipboard, ClipboardWrite};
 use crate::commands::Command;
 use crate::config::Config;
 use crate::editing;
@@ -213,6 +213,8 @@ impl App {
     ) -> Self {
         let (tx, rx) = mpsc::channel();
         let theme = Theme::by_name(&config.ui.theme).unwrap_or_else(Theme::dark);
+        // Read before `config` moves into the struct.
+        let clipboard = Clipboard::with_mode(config.clipboard_mode());
 
         let mut app = Self {
             buffers: Vec::new(),
@@ -224,7 +226,7 @@ impl App {
             config,
             theme,
             keymap: Keymap::defaults(),
-            clipboard: Clipboard::new(),
+            clipboard,
             search: SearchState::new(),
             ui: UiState::default(),
             cwd: platform::current_dir(),
@@ -369,7 +371,12 @@ impl App {
 
             match crossterm::event::poll(timeout) {
                 Ok(true) => match crossterm::event::read() {
-                    Ok(event) => self.handle_event(event),
+                    Ok(event) => {
+                        self.handle_event(event);
+                        // A copy may have queued an OSC 52 sequence for the
+                        // terminal; it goes out between frames, not inside one.
+                        self.flush_clipboard(terminal);
+                    }
                     Err(e) => {
                         log_error!("event read failed: {e}");
                         break;
@@ -1401,13 +1408,42 @@ impl App {
             self.info("Nothing to copy");
             return;
         }
-        let outcome = self.clipboard.set(&text);
+        let outcome = self.store_clipboard(&text);
         let chars = text.chars().count();
-        self.success(format!("Copied {chars} characters"));
+        // Saying "copied" when only the editor has the text would be a lie the
+        // user discovers at the worst moment — when they paste somewhere else.
+        if outcome.is_fallback() {
+            self.success(format!(
+                "Copied {chars} characters (inside the editor only)"
+            ));
+        } else {
+            self.success(format!("Copied {chars} characters"));
+        }
+    }
+
+    /// Put `text` on the clipboard, warning once when it cannot leave the
+    /// editor.
+    fn store_clipboard(&mut self, text: &str) -> ClipboardWrite {
+        let outcome = self.clipboard.set(text);
         if outcome.is_fallback() {
             if let Some(notice) = self.clipboard.take_fallback_notice() {
                 self.warn(notice);
             }
+        }
+        outcome
+    }
+
+    /// Hand any pending OSC 52 sequence to the terminal.
+    ///
+    /// Called by the event loop after a keystroke, never during a draw: the
+    /// sequence is terminal output, and it has to be flushed before the next
+    /// frame so a repaint cannot land in the middle of it.
+    fn flush_clipboard(&mut self, terminal: &mut crate::terminal::VibeTerminal) {
+        let Some(sequence) = self.clipboard.take_terminal_sequence() else {
+            return;
+        };
+        if let Err(e) = crate::terminal::write_raw(terminal, sequence.as_bytes()) {
+            log_warn!("could not send the clipboard to the terminal: {e}");
         }
     }
 
@@ -1420,7 +1456,7 @@ impl App {
             // Cut the current line.
             let line = doc.cursor_line_col().0;
             let text = format!("{}\n", doc.line_text(line));
-            self.clipboard.set(&text);
+            self.store_clipboard(&text);
             self.with_doc(editing::delete_lines);
             self.success("Cut line");
             return;
@@ -1431,7 +1467,7 @@ impl App {
             return;
         }
         let chars = text.chars().count();
-        self.clipboard.set(&text);
+        self.store_clipboard(&text);
         let changed = self.with_doc(editing::cut_at_carets);
         if changed {
             self.success(format!("Cut {chars} characters"));

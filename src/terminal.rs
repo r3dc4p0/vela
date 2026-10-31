@@ -41,6 +41,19 @@ pub type VibeBackend = CrosstermBackend<Stdout>;
 /// The concrete terminal type.
 pub type VibeTerminal = Terminal<VibeBackend>;
 
+/// Write bytes straight to the terminal, outside the frame buffer.
+///
+/// The clipboard's OSC 52 sequence has to go out between frames rather than
+/// into the cell grid, and it has to go out *before* the next draw so the
+/// sequence is not split by a repaint. Writing through the backend keeps the
+/// ordering with everything ratatui has queued.
+pub fn write_raw(terminal: &mut VibeTerminal, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let backend = terminal.backend_mut();
+    backend.write_all(bytes)?;
+    backend.flush()
+}
+
 /// True when the terminal is believed to speak the Kitty keyboard protocol.
 ///
 /// Detection is name based on purpose: it is instantaneous and never blocks.

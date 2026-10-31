@@ -286,6 +286,38 @@ cells that still hold a space. Painted before, the line painter's own leading
 spaces erase every rule it just drew — which is why the feature looked like it
 did nothing.
 
+### A copy leaves through whichever door is open
+
+Three ways to put text on a clipboard, and none of them is available
+everywhere. The OS pasteboard (`arboard`) is the direct one and the fastest, and
+it is what most of the time is right — but it does not exist over SSH, inside a
+container, or in a tmux session with no clipboard bridge, and in a remote
+session it may exist and be the *wrong machine's* clipboard. **OSC 52** asks the
+terminal to do the copy, which is the only route that reaches the user's own
+machine from a remote shell; terminals that implement it disagree about size
+limits, so the editor refuses to send more than 100 KiB rather than risk
+stalling one. The internal buffer is always written as well, so a paste inside
+the editor never depends on either.
+
+`clipboard = "auto" | "system" | "terminal" | "internal"` chooses the order.
+`auto` tries the pasteboard and falls back to the terminal, which is the right
+default for both a desktop terminal and a remote one; `terminal` is the escape
+hatch for the case the fallback cannot detect — a pasteboard that exists but is
+not the one the user is looking at.
+
+Two details are worth stating. The OSC 52 sequence is **queued, not written**:
+the clipboard has no terminal handle, and a sequence written from inside a
+key handler could land in the middle of a repaint. The event loop flushes it
+after the event and before the next frame, through the backend, so the ordering
+with everything ratatui has queued is preserved. And the status message is
+honest: "Copied 120 characters" means it left the editor, "Copied 120
+characters (inside the editor only)" means it did not — a copy that quietly
+stays internal is discovered at the worst possible moment, when it is pasted
+somewhere else and turns out to be stale.
+
+Base64 is twenty lines in `src/clipboard.rs` rather than a dependency: it is the
+only place the editor needs it, and the known vectors are a unit test.
+
 ### Mouse hit-testing reads the last frame
 
 Mouse events arrive as screen coordinates, but the mapping from a cell to a
@@ -637,6 +669,7 @@ would dominate the startup budget.
 | UI | `tests/ui_render.rs` renders into ratatui's `TestBackend` and asserts on the text of each row |
 | Indent guides | `tests/indent_guides.rs`: the rule runs from a block's first line to its last and stops at the closing brace, a blank line inside keeps it and a blank line after does not, a nested block gets its own, the spacing follows the file's indent width, the toggle and its key work, a flat file has none, and a rule never lands on a character |
 | Diff | `src/diff.rs`: identical files, an inserted, deleted and rewritten line, a rewritten block (paired rows, not all-removals-then-all-additions), an empty side, nothing in common, duplicated lines with no anchor, a large file with one edit, a block inserted in the middle, and a missing final newline not counting as a change. `tests/diff.rs`: both files side by side, the tint on each side, the gap a one-sided row leaves, columns staying aligned across an insertion, one scroll offset moving both, opening on the first change, `]`/`[` stepping through blocks (and through a tall one), the scroll keys stopping at the ends, `Esc` closing, typing not editing, a buffer compared with itself refused, comparing with an open file and with one that has to be opened, closing a compared file closing the view, and the wheel scrolling |
+| Clipboard | `src/clipboard.rs`: the internal buffer round-trips, terminal mode queues exactly one sequence and consumes it, system mode never asks the terminal, auto falls back to it, base64 against the known vectors (including a multi-byte character), a selection over the size limit is refused with a reason, and the mode parses from the setting. `tests/clipboard.rs`: `Ctrl+C` on a selection and on a bare line, `Ctrl+X` both ways, the message that says whether the text left, and the setting choosing the channel |
 | Hint bar | `tests/hints.rs`: clicking save saves, commands opens the palette, open opens the picker, find opens the find bar, help opens help, and close closes the diff view; a click on the empty part of the bar does nothing; the caret does not move; the pointer lights the hint under it and the light goes out when it leaves; a hidden bar has no buttons, including after being hidden at runtime; a narrow bar's hits stay inside the screen; and nothing is pressable while a palette is up |
 | Features | `tests/features.rs`: reload (and the confirmation that guards it), recents, session restore, binary refusal, a key override, quick open, trim, regex backreferences, whole-word, UTF-16 and CR round trips, the display toggles, a colour override and the document statistics |
 | Indentation | `tests/indent.rs`: a two-space file indents by two and a tab file by a tab, the file beats the settings, a new buffer uses them, `detect_indent = false` turns it off, a file with no indentation falls back, the status bar names the style, Enter and the pair expansion use the file's width, dedent removes one of its levels, two buffers in one session keep their own styles, and the `Ctrl+Shift+I` menu opens on the current style, offers tabs and the three common widths, sends "Other width…" to the width prompt, refuses a bad width without closing, and cancels on Esc |

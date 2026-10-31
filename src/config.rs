@@ -84,6 +84,14 @@ pub struct EditorSettings {
     pub confirm_unsaved: bool,
     /// Restore the previous session's buffers on startup.
     pub restore_session: bool,
+    /// Where a copy goes: `auto`, `system`, `terminal` or `internal`.
+    ///
+    /// `auto` uses the OS pasteboard and falls back to asking the terminal
+    /// (OSC 52) when there is none — which is the case over SSH, in tmux and in
+    /// containers. `terminal` is for the sessions where the pasteboard exists
+    /// but belongs to the wrong machine. `internal` keeps everything inside the
+    /// editor.
+    pub clipboard: String,
 }
 
 impl Default for EditorSettings {
@@ -107,6 +115,7 @@ impl Default for EditorSettings {
             max_undo_mb: 64,
             confirm_unsaved: true,
             restore_session: false,
+            clipboard: "auto".to_string(),
         }
     }
 }
@@ -368,6 +377,14 @@ impl Config {
     }
 
     /// Effective drawing style, falling back to the default on a bad value.
+    /// Where a copy goes, from the `clipboard` setting.
+    ///
+    /// An unknown value falls back to `auto` rather than failing the whole
+    /// configuration: a typo here should not cost the user their settings.
+    pub fn clipboard_mode(&self) -> crate::clipboard::ClipboardMode {
+        crate::clipboard::ClipboardMode::parse(&self.editor.clipboard).unwrap_or_default()
+    }
+
     pub fn ui_style(&self) -> UiStyle {
         UiStyle::parse(&self.ui.style).unwrap_or_default()
     }

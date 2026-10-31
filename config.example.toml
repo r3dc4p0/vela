@@ -62,6 +62,13 @@ max_undo_mb = 64
 confirm_unsaved = true
 # Reopen the files from the previous session at startup.
 restore_session = false
+# Where a copy goes. "auto" writes the OS pasteboard and, when there is none —
+# over SSH, inside tmux, in a container — asks the terminal to do it instead
+# (OSC 52). "terminal" always asks the terminal, which is what you want when the
+# pasteboard exists but belongs to the wrong machine. "system" uses only the
+# pasteboard. "internal" keeps everything inside the editor. A selection is
+# always kept internally as well, so pasting inside the editor works either way.
+clipboard = "auto"
 
 [ui]
 # "vibe-dark" or "vibe-light". Individual colours can be overridden in [colors].
